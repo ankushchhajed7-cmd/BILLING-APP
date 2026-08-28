@@ -2,13 +2,23 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.4  (28-08-2026)
+  Version : v1.6  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.6 - Customer list simplified.
+         * Rows show only name + mobile (bill totals live in Saved bills)
+         * "Add customer" form to enter names manually
+         * ✕ removes a customer without touching their bills
+         * List sorted A-Z
+  v1.5 - Printed-style bill image for WhatsApp.
+         * Canvas bill: नाव / बिल नं. / दिनांक, table with नग-दर-एकूण,
+           एकूण नग / एकूण रु / जमा रक्कम / बाकी रक्कम
+         * Preview then share via the Android share sheet
+         * Text bill still available on its own button
   v1.4 - "Later" folder for products whose rate isn't known yet.
          * Tabs: Pending / Later / Main
          * ⏱ parks a pending product in Later, ↩ sends it back
@@ -344,12 +354,13 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
     </div>
     <div class="g2" style="margin-bottom:8px">
       <button class="btn-gold" id="bSave">Save changes</button>
-      <button class="btn-wa" id="bWA">Send on WhatsApp</button>
+      <button class="btn-wa" id="bWA">Send bill image</button>
     </div>
-    <div class="g2">
-      <button class="btn" id="bPreview">Preview message</button>
-      <button class="btn" id="bClear">New bill</button>
+    <div class="g2" style="margin-bottom:8px">
+      <button class="btn" id="bWAtext">Send as text</button>
+      <button class="btn" id="bPreview">Preview text</button>
     </div>
+    <button class="btn full" id="bClear">New bill</button>
   </div>
 </section>
 
@@ -415,6 +426,21 @@ Tea Powder 250g, 108, 125"></textarea>
 
 <!-- ============ CUSTOMERS ============ -->
 <section id="v-cust" class="view">
+  <div class="card">
+    <div class="ttl">Add customer</div>
+    <div class="g2" style="margin-bottom:10px">
+      <div>
+        <label for="ncName">Name</label>
+        <input id="ncName" placeholder="Customer name" autocomplete="off">
+      </div>
+      <div>
+        <label for="ncMob">Mobile</label>
+        <input id="ncMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
+      </div>
+    </div>
+    <button class="btn-gold full" id="bCAdd">Save customer</button>
+  </div>
+
   <div class="card">
     <div class="ttl">Customers <span class="hint" id="cCount">0</span></div>
     <input id="cSearch" placeholder="Search name or mobile" autocomplete="off" style="margin-bottom:10px">
@@ -494,7 +520,7 @@ Tea Powder 250g, 108, 125"></textarea>
 
 <div class="sheet" id="sheet"><div class="inner">
   <div class="grip"></div>
-  <div class="ttl" style="font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);text-transform:uppercase;margin-bottom:10px">Message preview</div>
+  <div class="ttl" id="sheetTtl" style="font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);text-transform:uppercase;margin-bottom:10px">Message preview</div>
   <div class="bill-preview" id="sheetBody"></div>
   <div class="g2" style="margin-top:12px">
     <button class="btn" id="bCopy">Copy text</button>
@@ -911,14 +937,20 @@ function buildMsg(lang, bill){
 
 $('bPreview').onclick = ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
+  $('sheetTtl').textContent = 'Message preview';
+  $('sheetBody').style.background = '#071C18';
   $('sheetBody').textContent = buildMsg(S.lang);
+  $('bCopy').textContent = 'Copy text';
+  $('bCopy').dataset.mode = 'txt';
+  $('bCopy').className = 'btn';
   $('sheet').classList.add('on');
 };
 $('bCloseSheet').onclick = ()=> $('sheet').classList.remove('on');
 $('sheet').onclick = e=>{ if(e.target.id === 'sheet') $('sheet').classList.remove('on'); };
 $('bCopy').onclick = ()=>{
-  const txt = $('sheetBody').textContent;
-  navigator.clipboard.writeText(txt).then(()=>toast('Copied')).catch(()=>toast('Copy failed — select the text'));
+  if($('bCopy').dataset.mode === 'img'){ shareImage(); return; }
+  navigator.clipboard.writeText($('sheetBody').textContent)
+    .then(()=>toast('Copied')).catch(()=>toast('Copy failed — select the text'));
 };
 
 /* ---------------- save + whatsapp ---------------- */
@@ -961,7 +993,7 @@ function saveBill(silent){
 }
 $('bSave').onclick = ()=> saveBill(false);
 
-$('bWA').onclick = ()=>{
+$('bWAtext').onclick = ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
   const mob = $('cMob').value.replace(/\D/g,'');
   if(mob.length < 10){ toast('Enter the 10 digit mobile number'); $('cMob').focus(); return; }
@@ -971,6 +1003,163 @@ $('bWA').onclick = ()=>{
   window.open('https://wa.me/' + wa + '?text=' + encodeURIComponent(msg), '_blank');
   toast('Bill #' + bill.no + ' saved and opened in WhatsApp');
 };
+
+/* ---------------- printed-style bill image ---------------- */
+const MR = {
+  est:'ESTIMATE', name:'नाव', bill:'बिल नं.', date:'दिनांक',
+  det:'मालाचा तपशील', qty:'नग', rate:'दर', amt:'एकूण',
+  tqty:'एकूण नग', ttl:'एकूण रु', paid:'जमा रक्कम', due:'बाकी रक्कम', disc:'सवलत',
+  foot:'Once product sale can\'t be return or refund.'
+};
+const EN = {
+  est:'ESTIMATE', name:'Name', bill:'Bill No.', date:'Date',
+  det:'Item details', qty:'Qty', rate:'Rate', amt:'Amount',
+  tqty:'Total qty', ttl:'Total', paid:'Paid', due:'Balance', disc:'Discount',
+  foot:'Once product sale can\'t be return or refund.'
+};
+const f2 = n => (Math.round(n*100)/100).toFixed(2);
+const f3 = n => (Math.round(n*1000)/1000).toFixed(3);
+
+async function drawBill(bill, lang){
+  const L = lang === 'mr' ? MR : EN;
+  try{ await document.fonts.ready; }catch(e){}
+  const items = bill.items;
+  const W = 760, rowH = 52, headTop = 250;
+  const H = headTop + 60 + items.length*rowH + (bill.disc > 0 ? 46 : 0) + 250;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const F = (w,s)=> g.font = w + ' ' + s + 'px Mukta, "Noto Sans Devanagari", sans-serif';
+
+  g.fillStyle = '#fff'; g.fillRect(0,0,W,H);
+  g.fillStyle = '#000'; g.strokeStyle = '#000'; g.lineWidth = 1.4;
+
+  const L0 = 22, R0 = W - 22;
+  const cQ = 418, cR = 530, cA = 636;   // column dividers
+  const line = y => { g.beginPath(); g.moveTo(L0,y); g.lineTo(R0,y); g.stroke(); };
+
+  // shop name
+  g.textAlign = 'center'; F('700', 34);
+  g.fillText(lang === 'mr' ? (S.shopMr || S.shop) : S.shop, W/2, 52);
+  F('500', 19);
+  g.fillText('KIRANA & GENERAL STORE', W/2, 78);
+
+  // ESTIMATE + time
+  F('700', 30); g.fillText(L.est, W/2, 128);
+  F('500', 21); g.textAlign = 'right';
+  const d = new Date(bill.date);
+  let hh = d.getHours(), ap = hh >= 12 ? 'PM' : 'AM';
+  hh = hh % 12 || 12;
+  g.fillText(hh + ':' + String(d.getMinutes()).padStart(2,'0') + ' ' + ap, R0, 128);
+
+  line(146);
+
+  // customer block
+  g.textAlign = 'left'; F('600', 23);
+  g.fillText(L.name + ' :', L0 + 10, 184);
+  F('500', 23);
+  g.fillText(bill.cName || 'Cash', L0 + 130, 184);
+  g.textAlign = 'right'; F('600', 23);
+  g.fillText(L.date + ' : ' + dstr(bill.date), R0 - 10, 184);
+  g.textAlign = 'left'; F('600', 23);
+  g.fillText(L.bill + ' :', L0 + 10, 220);
+  F('500', 23);
+  g.fillText(String(bill.no), L0 + 130, 220);
+  if(bill.cMobile){
+    g.textAlign = 'right'; F('500', 21);
+    g.fillText(bill.cMobile, R0 - 10, 220);
+  }
+
+  // table head
+  let y = headTop;
+  line(y);
+  F('700', 24); g.textAlign = 'left';
+  g.fillText(L.det, L0 + 10, y + 38);
+  g.textAlign = 'center';
+  g.fillText(L.qty, (cQ + cR)/2, y + 38);
+  g.fillText(L.rate, (cR + cA)/2, y + 38);
+  g.fillText(L.amt, (cA + R0)/2, y + 38);
+  y += 60; line(y);
+
+  // rows
+  items.forEach(i=>{
+    const nm = (lang === 'mr' && i.mar) ? i.mar : i.name;
+    g.textAlign = 'left';
+    let size = 23;
+    F('500', size);
+    let t = nm;
+    while(g.measureText(t).width > cQ - L0 - 26 && size > 15){ size -= 1; F('500', size); }
+    while(g.measureText(t).width > cQ - L0 - 26 && t.length > 4){ t = t.slice(0,-1); }
+    if(t !== nm) t = t.slice(0,-1) + '…';
+    g.fillText(t, L0 + 10, y + 34);
+    F('500', 21); g.textAlign = 'right';
+    g.fillText(f3(i.qty), cR - 16, y + 34);
+    g.fillText(f2(i.rate), cA - 16, y + 34);
+    g.fillText(f2(i.qty * i.rate), R0 - 12, y + 34);
+    y += rowH; line(y);
+  });
+  g.beginPath(); g.moveTo(cQ, headTop); g.lineTo(cQ, y); g.stroke();
+
+  // totals
+  y += 20;
+  F('700', 25); g.textAlign = 'left';
+  g.fillText(L.tqty + ' : ' + (Math.round(bill.qty*100)/100), L0 + 10, y + 30);
+  g.textAlign = 'right';
+  g.fillText(L.ttl + ' :', 600, y + 30);
+  g.fillText(f2(bill.sub), R0 - 12, y + 30);
+  y += 44;
+  if(bill.disc > 0){
+    g.fillText(L.disc + ' :', 600, y + 30);
+    g.fillText(f2(bill.disc), R0 - 12, y + 30);
+    y += 44;
+  }
+  g.fillText(L.paid + ' :', 600, y + 30);
+  g.fillText(f2(bill.grand), R0 - 12, y + 30);
+  y += 44;
+  g.fillText(L.due + ' :', 600, y + 30);
+  g.fillText('0.00', R0 - 12, y + 30);
+  y += 30;
+
+  line(y + 16);
+  F('500', 20); g.textAlign = 'center';
+  g.fillText(L.foot, W/2, y + 58);
+  if(S.phone){ F('500', 20); g.fillText((lang === 'mr' ? 'संपर्क : ' : 'Contact : ') + S.phone, W/2, y + 88); }
+
+  // outer frame
+  g.strokeRect(L0, 12, R0 - L0, y + 96);
+  return c;
+}
+
+let lastBlob = null;
+$('bWA').onclick = async ()=>{
+  if(!cart.length){ toast('Bill is empty'); return; }
+  const bill = saveBill(true);
+  toast('Making the bill image…');
+  const canvas = await drawBill(bill, S.lang);
+  canvas.toBlob(blob=>{
+    lastBlob = blob;
+    const url = URL.createObjectURL(blob);
+    $('sheetTtl').textContent = 'Bill #' + bill.no;
+    $('sheetBody').innerHTML = '<img src="'+url+'" alt="" style="width:100%;border-radius:8px;display:block">';
+    $('sheetBody').style.background = '#fff';
+    $('bCopy').textContent = 'Share on WhatsApp';
+    $('bCopy').dataset.mode = 'img';
+    $('bCopy').className = 'btn-wa';
+    $('sheet').classList.add('on');
+  }, 'image/png');
+};
+
+async function shareImage(){
+  if(!lastBlob) return;
+  const file = new File([lastBlob], 'bill.png', {type:'image/png'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({ files:[file] }); return; }catch(e){ if(e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(lastBlob);
+  a.download = 'bill.png'; a.click();
+  toast('Image saved — attach it in WhatsApp');
+}
 
 $('bClear').onclick = ()=>{
   if(cart.length && !confirm('Start a new bill? Unsaved items will be cleared.')) return;
@@ -985,12 +1174,13 @@ function renderCust(){
   const list = q ? C.filter(c=> c.name.toLowerCase().includes(q) || (c.mobile||'').includes(q)) : C;
   $('cCount').textContent = C.length;
   const box = $('custList');
-  box.innerHTML = list.length ? list.slice().sort((a,b)=>(b.last||0)-(a.last||0)).slice(0,300).map(c=>
+  box.innerHTML = list.length ? list.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>
     '<div class="lrow"><div class="main"><b>'+esc(c.name)+'</b><small>'+
-    (c.mobile ? c.mobile + ' • ' : '') + (c.bills||0) + ' bills • ' + money0(c.spent||0) +
-    '</small></div><button class="btn btn-sm" data-bill="'+esc(c.id)+'">New bill</button>' +
-    (c.mobile ? '<button class="btn btn-sm" data-wa="'+esc(c.mobile)+'">Chat</button>' : '') + '</div>'
-  ).join('') : '<div class="empty"><b>No customers yet</b>They get added automatically when you save a bill.</div>';
+    (c.mobile || 'No mobile') + '</small></div>' +
+    '<button class="btn btn-sm" data-bill="'+esc(c.id)+'">New bill</button>' +
+    (c.mobile ? '<button class="btn btn-sm" data-wa="'+esc(c.mobile)+'">Chat</button>' : '') +
+    '<button class="btn-x btn-ico" data-cdel="'+esc(c.id)+'">✕</button></div>'
+  ).join('') : '<div class="empty"><b>No customers yet</b>Add one above, or they get saved automatically when you make a bill.</div>';
 
   box.querySelectorAll('[data-bill]').forEach(b=> b.onclick = ()=>{
     const c = C.find(x=>x.id === b.dataset.bill);
@@ -1001,6 +1191,12 @@ function renderCust(){
   });
   box.querySelectorAll('[data-wa]').forEach(b=> b.onclick = ()=>{
     window.open('https://wa.me/91' + b.dataset.wa, '_blank');
+  });
+  box.querySelectorAll('[data-cdel]').forEach(b=> b.onclick = ()=>{
+    const c = C.find(x=>x.id === b.dataset.cdel);
+    if(c && confirm('Remove "'+c.name+'" from the customer list? Their saved bills stay.')){
+      C = C.filter(x=>x.id !== b.dataset.cdel); save(); renderCust(); toast('Customer removed');
+    }
   });
 
   $('bCount').textContent = B.length;
@@ -1027,6 +1223,22 @@ function renderCust(){
   });
 }
 $('cSearch').oninput = renderCust;
+
+$('bCAdd').onclick = ()=>{
+  const name = $('ncName').value.trim();
+  const mob = $('ncMob').value.replace(/\D/g,'').slice(-10);
+  if(!name){ toast('Enter a name'); $('ncName').focus(); return; }
+  if(mob && mob.length !== 10){ toast('Mobile should be 10 digits'); $('ncMob').focus(); return; }
+  let c = mob ? C.find(x=>x.mobile === mob) : null;
+  if(c){ c.name = name; toast('Customer updated'); }
+  else {
+    C.push({ id:'c'+Date.now(), name, mobile:mob, since:Date.now(), bills:0, spent:0 });
+    toast('Customer saved');
+  }
+  save(); $('ncName').value = ''; $('ncMob').value = '';
+  renderCust(); fillDatalists();
+};
+$('ncMob').addEventListener('keydown', e=>{ if(e.key === 'Enter') $('bCAdd').click(); });
 
 /* ---------------- dashboard ---------------- */
 function renderDash(){
