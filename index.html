@@ -2,13 +2,15 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v2.1  (28-08-2026)
+  Version : v2.2  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v2.2 - Paste step spelled out under the send button, since the
+         system "Copied." toast was hiding the app's own hint.
   v2.1 - Bill image sharing made reliable.
          * Shares JPEG instead of PNG (WhatsApp accepts it far better)
          * New "Save image" button — always works, attach from Gallery
@@ -550,6 +552,10 @@ Tea Powder 250g, 108, 125"></textarea>
   <div class="ttl" id="sheetTtl" style="font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);text-transform:uppercase;margin-bottom:10px">Message preview</div>
   <div class="bill-preview" id="sheetBody"></div>
   <a id="bWAdirect" class="btn-wa btnlink" style="margin-top:12px;display:none" target="_blank" rel="noopener">Send</a>
+  <p id="pasteHint" style="display:none;color:var(--brass);font-size:13px;line-height:1.55;margin:8px 4px 0;text-align:center">
+    Chat khulne ke baad <b>message box par der tak dabao → Paste</b> → send.<br>
+    <span style="color:var(--dim)">Ya "Save image" se gallery mein save karke 📎 se bhejo.</span>
+  </p>
   <div class="g2" style="margin-top:8px">
     <button class="btn" id="bCopy">Copy text</button>
     <button class="btn" id="bSaveImg" style="display:none">Save image</button>
@@ -974,6 +980,7 @@ $('bPreview').onclick = ()=>{
   $('sheetBody').style.background = '#071C18';
   $('sheetBody').textContent = buildMsg(S.lang);
   $('bWAdirect').style.display = 'none';
+  $('pasteHint').style.display = 'none';
   $('bSaveImg').style.display = 'none';
   $('bCopy').textContent = 'Copy text';
   $('bCopy').dataset.mode = 'txt';
@@ -1196,8 +1203,10 @@ $('bWA').onclick = async ()=>{
     dbtn.style.display = 'block';
     dbtn.textContent = 'Send to ' + (bill.cName || mob);
     dbtn.href = 'https://wa.me/' + (mob.length === 10 ? '91' + mob : mob);
+    $('pasteHint').style.display = 'block';
   } else {
     dbtn.style.display = 'none';
+    $('pasteHint').style.display = 'none';
   }
   $('sheet').classList.add('on');
 };
