@@ -2,13 +2,16 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v2.6  (28-08-2026)
+  Version : v2.7  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v2.7 - Dotted line between items in the text bill, and an "="
+         before the amount (also stops WhatsApp from turning
+         "12.50 125.00" into a blue phone-number link).
   v2.6 - Text bill now looks like the printed estimate.
          * Item table wrapped in a WhatsApp monospace block so the
            qty / rate / amount columns line up
@@ -982,10 +985,12 @@ function buildMsg(lang, bill){
   if(cn) b += 'Name: ' + cn + '\n';
   if(cm) b += 'Mob : ' + cm + '\n';
   if(cn || cm) b += sep + '\n';
+  const dot = '.'.repeat(W);
   items.forEach((i,ix)=>{
     const nm = (mr && i.mar) ? i.mar : i.name;
     b += (ix+1) + '. ' + nm + '\n';
-    b += '  ' + padL(q1(i.qty), 5) + ' x ' + padL(n2(i.rate), 7) + padL(n2(i.qty*i.rate), 9) + '\n';
+    b += ' ' + padL(q1(i.qty), 4) + ' x ' + padL(n2(i.rate), 7) + ' =' + padL(n2(i.qty*i.rate), 9) + '\n';
+    if(ix < items.length - 1) b += dot + '\n';
   });
   b += sep + '\n';
   b += padR('Total qty', 16) + padL(q1(t.qty), 10) + '\n';
