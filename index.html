@@ -2,13 +2,17 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v2.0  (28-08-2026)
+  Version : v2.1  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v2.1 - Bill image sharing made reliable.
+         * Shares JPEG instead of PNG (WhatsApp accepts it far better)
+         * New "Save image" button — always works, attach from Gallery
+         * Share errors are now shown instead of failing silently
   v2.0 - WhatsApp launch fixed inside the installed app.
          * "Send to <customer>" is now a real link, not window.open,
            which the installed PWA was silently blocking
@@ -548,8 +552,9 @@ Tea Powder 250g, 108, 125"></textarea>
   <a id="bWAdirect" class="btn-wa btnlink" style="margin-top:12px;display:none" target="_blank" rel="noopener">Send</a>
   <div class="g2" style="margin-top:8px">
     <button class="btn" id="bCopy">Copy text</button>
-    <button class="btn-gold" id="bCloseSheet">Close</button>
+    <button class="btn" id="bSaveImg" style="display:none">Save image</button>
   </div>
+  <button class="btn-gold full" id="bCloseSheet" style="margin-top:8px">Close</button>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -969,6 +974,7 @@ $('bPreview').onclick = ()=>{
   $('sheetBody').style.background = '#071C18';
   $('sheetBody').textContent = buildMsg(S.lang);
   $('bWAdirect').style.display = 'none';
+  $('bSaveImg').style.display = 'none';
   $('bCopy').textContent = 'Copy text';
   $('bCopy').dataset.mode = 'txt';
   $('bCopy').className = 'btn';
@@ -1165,32 +1171,35 @@ async function drawBill(bill, lang){
   return c;
 }
 
-let lastBlob = null;
+let lastBlob = null, lastJpg = null, lastNo = 0;
 $('bWA').onclick = async ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
   const bill = saveBill(true);
   const mob = (bill.cMobile || '').replace(/\D/g,'');
+  lastNo = bill.no;
   toast('Making the bill image…');
   const canvas = await drawBill(bill, S.lang);
-  canvas.toBlob(blob=>{
-    lastBlob = blob;
-    const url = URL.createObjectURL(blob);
-    $('sheetTtl').textContent = 'Bill #' + bill.no;
-    $('sheetBody').innerHTML = '<img src="'+url+'" alt="" style="width:100%;border-radius:8px;display:block">';
-    $('sheetBody').style.background = '#fff';
-    $('bCopy').textContent = 'Share…';
-    $('bCopy').dataset.mode = 'img';
-    $('bCopy').className = 'btn';
-    const dbtn = $('bWAdirect');
-    if(mob.length >= 10){
-      dbtn.style.display = 'block';
-      dbtn.textContent = 'Send to ' + (bill.cName || mob);
-      dbtn.href = 'https://wa.me/' + (mob.length === 10 ? '91' + mob : mob);
-    } else {
-      dbtn.style.display = 'none';
-    }
-    $('sheet').classList.add('on');
-  }, 'image/png');
+  const mk = (t,q)=> new Promise(r=> canvas.toBlob(r, t, q));
+  lastBlob = await mk('image/png');
+  lastJpg  = await mk('image/jpeg', 0.92);
+
+  const url = URL.createObjectURL(lastJpg);
+  $('sheetTtl').textContent = 'Bill #' + bill.no;
+  $('sheetBody').innerHTML = '<img src="'+url+'" alt="" style="width:100%;border-radius:8px;display:block">';
+  $('sheetBody').style.background = '#fff';
+  $('bCopy').textContent = 'Share…';
+  $('bCopy').dataset.mode = 'img';
+  $('bCopy').className = 'btn';
+  $('bSaveImg').style.display = 'block';
+  const dbtn = $('bWAdirect');
+  if(mob.length >= 10){
+    dbtn.style.display = 'block';
+    dbtn.textContent = 'Send to ' + (bill.cName || mob);
+    dbtn.href = 'https://wa.me/' + (mob.length === 10 ? '91' + mob : mob);
+  } else {
+    dbtn.style.display = 'none';
+  }
+  $('sheet').classList.add('on');
 };
 
 $('bWAdirect').onclick = ()=>{
@@ -1203,16 +1212,31 @@ $('bWAdirect').onclick = ()=>{
   setTimeout(()=> $('sheet').classList.remove('on'), 600);
 };
 
-async function shareImage(){
-  if(!lastBlob) return;
-  const file = new File([lastBlob], 'bill.png', {type:'image/png'});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({ files:[file] }); return; }catch(e){ if(e.name === 'AbortError') return; }
-  }
+function saveImage(){
+  if(!lastJpg) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(lastBlob);
-  a.download = 'bill.png'; a.click();
-  toast('Image saved — attach it in WhatsApp');
+  a.href = URL.createObjectURL(lastJpg);
+  a.download = 'bill-' + lastNo + '.jpg';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('Saved to your phone — attach it from Gallery in WhatsApp');
+}
+$('bSaveImg').onclick = saveImage;
+
+async function shareImage(){
+  if(!lastJpg) return;
+  const file = new File([lastJpg], 'bill-' + lastNo + '.jpg', { type:'image/jpeg' });
+  if(navigator.canShare && navigator.canShare({ files:[file] })){
+    try{
+      await navigator.share({ files:[file] });
+      return;
+    }catch(e){
+      if(e.name === 'AbortError') return;
+      toast('Share failed (' + e.name + ') — saving instead');
+    }
+  } else {
+    toast('This phone can\'t share images — saving instead');
+  }
+  saveImage();
 }
 
 $('bClear').onclick = ()=>{
