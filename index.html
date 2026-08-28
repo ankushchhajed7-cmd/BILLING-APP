@@ -2,13 +2,19 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.2  (28-08-2026)
+  Version : v1.3  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.3 - Rate pending / Main list split.
+         * Product with no sell rate sits in "Rate pending"
+         * Type the rate, tap ✓, it moves to "Main list"
+         * Delete (✕) works in both lists
+         * "Clear all sell rates" button empties every rate at once
+         * Billing search shows rated products first
   v1.2 - Product search dropdown.
          * First letter typed = numbered match list (1,2,3...) below the box
          * Shows sell rate next to each match, tap to fill
@@ -214,6 +220,11 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 .sug .rt{font-size:12.5px;color:var(--brass);white-space:nowrap}
 .sug .none{padding:13px;color:var(--dim);font-size:13px;text-align:center;line-height:1.5}
 
+/* ---------- pending rate entry ---------- */
+.qr{width:84px;padding:8px 9px;text-align:right;font-weight:600}
+.seg b{font-weight:700;opacity:.85;margin-left:3px}
+.lrow.pend .main b{white-space:normal}
+
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
   background:linear-gradient(180deg,#F7E2A6,#D8A63D);color:#241800;padding:11px 18px;border-radius:11px;
@@ -379,8 +390,17 @@ Tea Powder 250g, 108, 125"></textarea>
 
   <div class="card">
     <div class="ttl">Product list <span class="hint" id="pCount2">0</span></div>
+    <div class="seg" style="margin-bottom:10px">
+      <button id="tabPend" class="on">Rate pending <b id="nPend">0</b></button>
+      <button id="tabMain">Main list <b id="nMain">0</b></button>
+    </div>
     <input id="pSearch" placeholder="Search product" autocomplete="off" style="margin-bottom:10px">
     <div id="prodList"></div>
+    <button class="btn full btn-sm" id="bClearRates" style="margin-top:12px">Clear all sell rates</button>
+    <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:8px 2px 0">
+      Type a sell rate and tap ✓ — the product moves straight to the main list. Anything you don't
+      stock, delete with ✕.
+    </p>
   </div>
 </section>
 
@@ -520,18 +540,37 @@ function findProd(name){
   const n = String(name).trim().toLowerCase();
   return P.find(p => p.name.toLowerCase() === n);
 }
+let prodTab = 'pending';
 function renderProd(){
   const q = $('pSearch').value.trim().toLowerCase();
-  const list = q ? P.filter(p => p.name.toLowerCase().includes(q) || (p.mar||'').includes(q)) : P;
+  const pend = P.filter(p => !num(p.sell));
+  const main = P.filter(p => num(p.sell) > 0);
+  $('nPend').textContent = pend.length;
+  $('nMain').textContent = main.length;
   $('pCount').textContent = P.length + ' products';
+
+  const base = prodTab === 'pending' ? pend : main;
+  const list = q ? base.filter(p => p.name.toLowerCase().includes(q) || (p.mar||'').includes(q)) : base;
   $('pCount2').textContent = list.length + (q ? ' found' : '');
+
   const box = $('prodList');
   if(!list.length){
-    box.innerHTML = '<div class="empty"><b>' + (q ? 'Nothing found' : 'No products yet') + '</b>' +
-      (q ? 'Try a shorter word.' : 'Add one above, or paste your whole list in Bulk add.') + '</div>';
+    box.innerHTML = '<div class="empty"><b>' +
+      (q ? 'Nothing found' : prodTab === 'pending' ? 'All rates are done' : 'Main list is empty') + '</b>' +
+      (q ? 'Try a shorter word.'
+         : prodTab === 'pending' ? 'Every product has a sell rate.'
+         : 'Add a sell rate to a pending product and it lands here.') + '</div>';
     return;
   }
+
   box.innerHTML = list.slice(0,400).map(p=>{
+    if(prodTab === 'pending'){
+      return '<div class="lrow pend"><div class="main"><b>'+esc(p.name)+'</b>' +
+        (num(p.pur) ? '<small>Purchase '+money(p.pur)+'</small>' : '') + '</div>' +
+        '<input class="qr num" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Rate" data-rate="'+esc(p.id)+'">' +
+        '<button class="btn-gold btn-sm" data-set="'+esc(p.id)+'">✓</button>' +
+        '<button class="btn-x" data-del="'+esc(p.id)+'">✕</button></div>';
+    }
     const m = num(p.sell) - num(p.pur);
     return '<div class="lrow"><div class="main"><b>'+esc(p.name)+'</b><small>'+
       (p.mar ? esc(p.mar)+' • ' : '') +
@@ -541,10 +580,11 @@ function renderProd(){
       '<button class="btn btn-sm" data-edit="'+esc(p.id)+'">Edit</button>' +
       '<button class="btn-x" data-del="'+esc(p.id)+'">✕</button></div>';
   }).join('');
+
   box.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=>{
     const p = P.find(x=>x.id===b.dataset.del);
     if(p && confirm('Delete "'+p.name+'" from the product list?')){
-      P = P.filter(x=>x.id!==b.dataset.del); save(); renderProd(); fillDatalists(); toast('Product deleted');
+      P = P.filter(x=>x.id!==b.dataset.del); save(); renderProd(); toast('Product deleted');
     }
   });
   box.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=>{
@@ -553,7 +593,44 @@ function renderProd(){
     $('bPAdd').textContent = 'Save changes';
     $('pName').scrollIntoView({behavior:'smooth',block:'center'});
   });
+  box.querySelectorAll('[data-set]').forEach(b=> b.onclick = ()=> setRate(b.dataset.set));
+  box.querySelectorAll('[data-rate]').forEach(inp=>{
+    inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); setRate(inp.dataset.rate); } });
+  });
 }
+
+function setRate(id){
+  const p = P.find(x=>x.id === id);
+  const inp = $('prodList').querySelector('[data-rate="'+id+'"]');
+  if(!p || !inp) return;
+  const r = num(inp.value);
+  if(r <= 0){ toast('Enter a sell rate first'); inp.focus(); return; }
+  p.sell = r;
+  save(); renderProd(); fillDatalists();
+  toast(p.name + ' → main list');
+}
+
+$('tabPend').onclick = ()=>{
+  prodTab = 'pending';
+  $('tabPend').classList.add('on'); $('tabMain').classList.remove('on');
+  renderProd();
+};
+$('tabMain').onclick = ()=>{
+  prodTab = 'main';
+  $('tabMain').classList.add('on'); $('tabPend').classList.remove('on');
+  renderProd();
+};
+
+$('bClearRates').onclick = ()=>{
+  const n = P.filter(p=>num(p.sell) > 0).length;
+  if(!n){ toast('No sell rates to clear'); return; }
+  if(!confirm('Clear the sell rate of all ' + n + ' products? They all move to Rate pending. Purchase rates and names stay.')) return;
+  P.forEach(p=> p.sell = 0);
+  save(); prodTab = 'pending';
+  $('tabPend').classList.add('on'); $('tabMain').classList.remove('on');
+  renderProd(); fillDatalists();
+  toast(n + ' rates cleared');
+};
 $('pSearch').oninput = renderProd;
 
 $('bPAdd').onclick = ()=>{
@@ -619,6 +696,7 @@ function showProdSug(){
     else if(n.includes(q) || (p.mar||'').includes(q)) has.push(p);
   });
   pList = starts.concat(has).slice(0,50);
+  pList.sort((a,b)=> (num(a.sell) ? 0 : 1) - (num(b.sell) ? 0 : 1));
   pIx = -1;
   box.innerHTML = pList.length
     ? pList.map((p,i)=>'<div class="r" data-i="'+i+'"><span class="sn">'+(i+1)+'</span>' +
