@@ -2,13 +2,17 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.9  (28-08-2026)
+  Version : v2.0  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v2.0 - WhatsApp launch fixed inside the installed app.
+         * "Send to <customer>" is now a real link, not window.open,
+           which the installed PWA was silently blocking
+         * Chat / Resend / Send as text use the same reliable opener
   v1.9 - Dropdown scroll fixed.
          * Selection now happens on tap release, not on touch start,
            so scrolling the list no longer picks an item
@@ -163,6 +167,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:600;cursor:poin
 }
 .btn-wa{background:linear-gradient(180deg,#3FCF6B,#1E9E4B 55%,#37C063);color:#04240F;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 12px rgba(0,0,0,.35)}
+.btnlink{display:block;text-align:center;text-decoration:none;border-radius:11px;
+  padding:13px 14px;font-weight:600;font-size:15px}
 .btn-sm{padding:8px 10px;font-size:13px;border-radius:9px}
 .btn-x{background:transparent;border:1px solid rgba(226,112,90,.4);color:var(--danger);padding:7px 9px;border-radius:9px;font-size:13px}
 .full{width:100%}
@@ -539,7 +545,7 @@ Tea Powder 250g, 108, 125"></textarea>
   <div class="grip"></div>
   <div class="ttl" id="sheetTtl" style="font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);text-transform:uppercase;margin-bottom:10px">Message preview</div>
   <div class="bill-preview" id="sheetBody"></div>
-  <button class="btn-wa full" id="bWAdirect" style="margin-top:12px;display:none">Send</button>
+  <a id="bWAdirect" class="btn-wa btnlink" style="margin-top:12px;display:none" target="_blank" rel="noopener">Send</a>
   <div class="g2" style="margin-top:8px">
     <button class="btn" id="bCopy">Copy text</button>
     <button class="btn-gold" id="bCloseSheet">Close</button>
@@ -1016,6 +1022,12 @@ function saveBill(silent){
 }
 $('bSave').onclick = ()=> saveBill(false);
 
+function openExt(url){
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 $('bWAtext').onclick = ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
   const mob = $('cMob').value.replace(/\D/g,'');
@@ -1023,7 +1035,7 @@ $('bWAtext').onclick = ()=>{
   const bill = saveBill(true);
   const msg = buildMsg(S.lang, bill);
   const wa = mob.length === 10 ? '91' + mob : mob;
-  window.open('https://wa.me/' + wa + '?text=' + encodeURIComponent(msg), '_blank');
+  openExt('https://wa.me/' + wa + '?text=' + encodeURIComponent(msg));
   toast('Bill #' + bill.no + ' saved and opened in WhatsApp');
 };
 
@@ -1173,7 +1185,7 @@ $('bWA').onclick = async ()=>{
     if(mob.length >= 10){
       dbtn.style.display = 'block';
       dbtn.textContent = 'Send to ' + (bill.cName || mob);
-      dbtn.dataset.mob = mob.length === 10 ? '91' + mob : mob;
+      dbtn.href = 'https://wa.me/' + (mob.length === 10 ? '91' + mob : mob);
     } else {
       dbtn.style.display = 'none';
     }
@@ -1188,8 +1200,7 @@ $('bWAdirect').onclick = ()=>{
       .then(()=> toast('Image copied — long-press the message box and Paste'))
       .catch(()=> toast('Copy failed — use Share instead'));
   }catch(e){ toast('Copy failed — use Share instead'); }
-  window.open('https://wa.me/' + $('bWAdirect').dataset.mob, '_blank');
-  $('sheet').classList.remove('on');
+  setTimeout(()=> $('sheet').classList.remove('on'), 600);
 };
 
 async function shareImage(){
@@ -1233,7 +1244,7 @@ function renderCust(){
     renderCart(); $('iName').focus();
   });
   box.querySelectorAll('[data-wa]').forEach(b=> b.onclick = ()=>{
-    window.open('https://wa.me/91' + b.dataset.wa, '_blank');
+    openExt('https://wa.me/91' + b.dataset.wa);
   });
   box.querySelectorAll('[data-cdel]').forEach(b=> b.onclick = ()=>{
     const c = C.find(x=>x.id === b.dataset.cdel);
@@ -1262,7 +1273,7 @@ function renderCust(){
   bb.querySelectorAll('[data-re]').forEach(x=> x.onclick = ()=>{
     const b = B.find(z=>z.id === x.dataset.re);
     const wa = b.cMobile.length === 10 ? '91' + b.cMobile : b.cMobile;
-    window.open('https://wa.me/' + wa + '?text=' + encodeURIComponent(buildMsg(S.lang, b)), '_blank');
+    openExt('https://wa.me/' + wa + '?text=' + encodeURIComponent(buildMsg(S.lang, b)));
   });
 }
 $('cSearch').oninput = renderCust;
