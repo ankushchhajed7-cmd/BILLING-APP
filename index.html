@@ -2,18 +2,25 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v2.4  (28-08-2026)
+  Version : v2.6  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
-  v2.4 - "Send to <customer>" is the primary green button again —
-         opens that customer's chat directly, image on the clipboard,
-         paste to attach. Share menu and Save image are secondary.
-         (WhatsApp cannot accept an image and a target number in one
-          link, so one of the two always needs an extra step.)
+  v2.6 - Text bill now looks like the printed estimate.
+         * Item table wrapped in a WhatsApp monospace block so the
+           qty / rate / amount columns line up
+         * Marathi shop name, देय रक्कम and thanks stay outside the
+           block (Devanagari does not align in monospace)
+  v2.5 - Text bill is the main way to send.
+         * Green "Send on WhatsApp" = text, straight to the customer,
+           one tap, no contact search
+         * Text bill reworked: shop header, बिल क्र./दिनांक/ग्राहक,
+           numbered items, एकूण नग / एकूण रु / देय रक्कम
+         * "Bill image" kept as a secondary button
+  v2.4 - "Send to <customer>" was the primary green button.
   v2.3 - Reverted the send flow to what actually worked.
          * Big green button is "Send on WhatsApp" (direct share) again
          * Shares PNG again, as in v1.5
@@ -392,11 +399,11 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
     </div>
     <div class="g2" style="margin-bottom:8px">
       <button class="btn-gold" id="bSave">Save changes</button>
-      <button class="btn-wa" id="bWA">Send bill image</button>
+      <button class="btn-wa" id="bWAtext">Send on WhatsApp</button>
     </div>
     <div class="g2" style="margin-bottom:8px">
-      <button class="btn" id="bWAtext">Send as text</button>
-      <button class="btn" id="bPreview">Preview text</button>
+      <button class="btn" id="bPreview">Preview</button>
+      <button class="btn" id="bWA">Bill image</button>
     </div>
     <button class="btn full" id="bClear">New bill</button>
   </div>
@@ -949,37 +956,48 @@ $('lgEn').onclick = ()=> setLang('en');
 
 /* ---------------- bill message ---------------- */
 function buildMsg(lang, bill){
-  const t = bill ? {
-    sub: bill.sub, disc: bill.disc, grand: bill.grand
-  } : totals();
+  const t = bill ? { sub: bill.sub, disc: bill.disc, grand: bill.grand, qty: bill.qty } : totals();
   const items = bill ? bill.items : cart;
   const no = bill ? bill.no : S.billNo;
   const date = bill ? bill.date : Date.now();
   const cn = bill ? bill.cName : $('cName').value.trim();
-  const cm = bill ? bill.cMobile : $('cMob').value.replace(/\D/g,'');
-  const L = lang === 'mr' ? {
-    shop: S.shopMr || S.shopMr === '' ? (S.shopMr || S.shop) : S.shop,
-    bill:'बिल क्र.', date:'दिनांक', cust:'ग्राहक', item:'वस्तू',
-    total:'एकूण', disc:'सवलत', pay:'देय रक्कम', thanks:'धन्यवाद! पुन्हा नक्की या.', call:'संपर्क'
-  } : {
-    shop: S.shop,
-    bill:'Bill No.', date:'Date', cust:'Customer', item:'Items',
-    total:'Total', disc:'Discount', pay:'Payable', thanks:'Thank you! Visit again.', call:'Contact'
-  };
-  const line = '------------------------------';
-  let m = '*' + L.shop + '*\n' + L.bill + ' ' + no + '  |  ' + L.date + ': ' + dstr(date) + '\n';
-  if(cn || cm) m += L.cust + ': ' + (cn || '-') + (cm ? ' (' + cm + ')' : '') + '\n';
-  m += line + '\n';
+  const cm = bill ? bill.cMobile : $('cMob').value.replace(/\D/g,'').slice(-10);
+  const mr = lang === 'mr';
+
+  const W = 26;
+  const n2 = v => (Math.round(v*100)/100).toFixed(2);
+  const q1 = v => String(Math.round(v*100)/100);
+  const padL = (s,n) => String(s).padStart(n);
+  const padR = (s,n) => { s = String(s); return s.length > n ? s.slice(0,n) : s.padEnd(n); };
+  const sep = '-'.repeat(W);
+
+  const d = new Date(date);
+  let hh = d.getHours(); const ap = hh >= 12 ? 'PM' : 'AM'; hh = hh % 12 || 12;
+  const tm = hh + ':' + String(d.getMinutes()).padStart(2,'0') + ' ' + ap;
+
+  let b = '';
+  b += padR('ESTIMATE', 14) + padL(dstr(date), 12) + '\n';
+  b += padR('Bill No. ' + no, 14) + padL(tm, 12) + '\n';
+  b += sep + '\n';
+  if(cn) b += 'Name: ' + cn + '\n';
+  if(cm) b += 'Mob : ' + cm + '\n';
+  if(cn || cm) b += sep + '\n';
   items.forEach((i,ix)=>{
-    const nm = (lang === 'mr' && i.mar) ? i.mar : i.name;
-    m += (ix+1) + '. ' + nm + '\n    ' + i.qty + ' × ' + i.rate + ' = ' + (Math.round(i.qty*i.rate*100)/100) + '\n';
+    const nm = (mr && i.mar) ? i.mar : i.name;
+    b += (ix+1) + '. ' + nm + '\n';
+    b += '  ' + padL(q1(i.qty), 5) + ' x ' + padL(n2(i.rate), 7) + padL(n2(i.qty*i.rate), 9) + '\n';
   });
-  m += line + '\n';
-  m += L.total + ': ₹' + (Math.round(t.sub*100)/100) + '\n';
-  if(t.disc > 0) m += L.disc + ': ₹' + (Math.round(t.disc*100)/100) + '\n';
-  m += '*' + L.pay + ': ₹' + (Math.round(t.grand*100)/100) + '*\n\n';
-  m += L.thanks;
-  if(S.phone) m += '\n' + L.call + ': ' + S.phone;
+  b += sep + '\n';
+  b += padR('Total qty', 16) + padL(q1(t.qty), 10) + '\n';
+  b += padR('Total', 16) + padL(n2(t.sub), 10) + '\n';
+  if(t.disc > 0) b += padR('Discount', 16) + padL(n2(t.disc), 10) + '\n';
+  b += padR('PAYABLE', 16) + padL(n2(t.grand), 10);
+
+  let m = '*' + (mr ? (S.shopMr || S.shop) : S.shop) + '*\nKIRANA & GENERAL STORE\n';
+  m += '```\n' + b + '\n```\n';
+  m += '*' + (mr ? 'देय रक्कम' : 'Payable') + ': ₹' + n2(t.grand) + '*\n\n';
+  m += mr ? 'धन्यवाद! पुन्हा नक्की या.' : 'Thank you! Visit again.';
+  if(S.phone) m += '\n' + (mr ? 'संपर्क' : 'Contact') + ': ' + S.phone;
   return m;
 }
 
