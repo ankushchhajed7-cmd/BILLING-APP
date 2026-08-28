@@ -2,13 +2,18 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.8  (28-08-2026)
+  Version : v1.9  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.9 - Dropdown scroll fixed.
+         * Selection now happens on tap release, not on touch start,
+           so scrolling the list no longer picks an item
+         * Dropdown closes on an outside tap instead of on blur
+         * Scrolling the list no longer drags the page behind it
   v1.8 - Search dropdown shows full names.
          * Customer dropdown spans the whole row, mobile on its own line
          * Long product names wrap instead of being cut with "..."
@@ -227,7 +232,8 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 .sugwrap{position:relative}
 .sug{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:25;display:none;
   background:linear-gradient(180deg,#154137,#0A2620);border:1px solid var(--brass);border-radius:12px;
-  overflow:auto;max-height:266px;-webkit-overflow-scrolling:touch;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  overflow:auto;max-height:266px;overscroll-behavior:contain;touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;box-shadow:0 14px 34px rgba(0,0,0,.6)}
 .sug.on{display:block}
 .sug .r{display:flex;align-items:center;gap:9px;padding:10px 11px;cursor:pointer;
   border-bottom:1px solid rgba(216,166,61,.14)}
@@ -767,7 +773,7 @@ function showProdSug(){
     : '<div class="none">No match. Type the full name and press Add — it saves as a new product.</div>';
   box.classList.add('on');
   box.querySelectorAll('.r').forEach(r=>{
-    r.addEventListener('pointerdown', e=>{ e.preventDefault(); pickProd(pList[+r.dataset.i]); });
+    r.onclick = ()=> pickProd(pList[+r.dataset.i]);
   });
 }
 function pickProd(p){
@@ -788,7 +794,6 @@ function moveSug(box, list, ix, dir){
 }
 $('iName').addEventListener('input', showProdSug);
 $('iName').addEventListener('focus', showProdSug);
-$('iName').addEventListener('blur', ()=> setTimeout(()=> $('iSug').classList.remove('on'), 160));
 $('iName').addEventListener('keydown', e=>{
   if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
     e.preventDefault(); pIx = moveSug($('iSug'), pList, pIx, e.key === 'ArrowDown' ? 1 : -1);
@@ -815,17 +820,15 @@ function showCustSug(){
     (c.mobile ? '<span>'+esc(c.mobile)+'</span>' : '') + '</span></div>').join('');
   box.classList.add('on');
   box.querySelectorAll('.r').forEach(r=>{
-    r.addEventListener('pointerdown', e=>{
-      e.preventDefault();
+    r.onclick = ()=>{
       const c = cList[+r.dataset.i];
       $('cName').value = c.name; if(c.mobile) $('cMob').value = c.mobile;
       box.classList.remove('on'); $('iName').focus();
-    });
+    };
   });
 }
 $('cName').addEventListener('input', showCustSug);
 $('cName').addEventListener('focus', showCustSug);
-$('cName').addEventListener('blur', ()=> setTimeout(()=> $('cSug').classList.remove('on'), 160));
 $('cName').addEventListener('keydown', e=>{
   if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
     e.preventDefault(); cIx = moveSug($('cSug'), cList, cIx, e.key === 'ArrowDown' ? 1 : -1);
@@ -835,6 +838,12 @@ $('cName').addEventListener('keydown', e=>{
     $('cName').value = c.name; if(c.mobile) $('cMob').value = c.mobile;
     $('cSug').classList.remove('on'); $('cMob').focus();
   } else if(e.key === 'Escape'){ $('cSug').classList.remove('on'); }
+});
+
+document.addEventListener('pointerdown', e=>{
+  document.querySelectorAll('.sug.on').forEach(s=>{
+    if(!s.parentElement.contains(e.target)) s.classList.remove('on');
+  });
 });
 
 $('cMob').oninput = ()=>{
