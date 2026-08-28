@@ -2,13 +2,19 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v2.8  (28-08-2026)
+  Version : v2.9  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v2.9 - Contact picker made reliable and no longer silent.
+         * Dropped the getProperties() await that ran before
+           select() and could break the user-gesture chain
+         * Handles phone numbers returned as objects
+         * Always shows what happened: added / updated / skipped,
+           or the exact error name
   v2.8 - Pick customers straight from the phone's contact list.
          * Billing screen: "Pick from phone contacts" fills name +
            mobile and saves the customer in one go
@@ -1360,42 +1366,44 @@ async function pickContacts(multiple){
     return null;
   }
   try{
-    let want = ['name','tel'];
-    if(navigator.contacts.getProperties){
-      const have = await navigator.contacts.getProperties();
-      want = want.filter(p => have.includes(p));
-    }
-    if(!want.length){ toast('Contact picker available nahi hai'); return null; }
-    return await navigator.contacts.select(want, { multiple });
+    const res = await navigator.contacts.select(['name','tel'], { multiple });
+    if(!res || !res.length){ toast('Koi contact select nahi hua'); return null; }
+    return res;
   }catch(e){
-    if(e.name !== 'AbortError') toast('Contact nahi mila (' + e.name + ')');
+    toast('Contact picker: ' + e.name);
     return null;
   }
 }
 function contactBits(c){
-  const name = (c.name && c.name[0]) ? String(c.name[0]).trim() : '';
-  const mob  = (c.tel && c.tel[0]) ? String(c.tel[0]).replace(/\D/g,'').slice(-10) : '';
+  let name = '';
+  if(c.name && c.name.length) name = String(c.name[0] || '').trim();
+  let raw = '';
+  if(c.tel && c.tel.length){
+    const t = c.tel[0];
+    raw = (t && typeof t === 'object') ? (t.value || t.tel || '') : String(t || '');
+  }
+  const mob = String(raw).replace(/\D/g,'').slice(-10);
   return { name, mob };
 }
 
 $('bPickB').onclick = async ()=>{
   const res = await pickContacts(false);
-  if(!res || !res.length) return;
+  if(!res) return;
   const { name, mob } = contactBits(res[0]);
   if(!name && !mob){ toast('Is contact mein naam/number nahi hai'); return; }
   if(name) $('cName').value = name;
   if(mob) $('cMob').value = mob;
   saveCustomer(); save(); fillDatalists();
-  toast(name || mob);
+  toast((name || mob) + ' added');
 };
 
 $('bPickC').onclick = async ()=>{
   const res = await pickContacts(true);
-  if(!res || !res.length) return;
-  let added = 0, upd = 0;
+  if(!res) return;
+  let added = 0, upd = 0, skip = 0;
   res.forEach(c=>{
     const { name, mob } = contactBits(c);
-    if(!name && !mob) return;
+    if(!name && !mob){ skip++; return; }
     const ex = mob ? C.find(x=>x.mobile === mob)
                    : C.find(x=>x.name.toLowerCase() === name.toLowerCase());
     if(ex){ if(name) ex.name = name; if(mob) ex.mobile = mob; upd++; }
@@ -1406,7 +1414,7 @@ $('bPickC').onclick = async ()=>{
     }
   });
   save(); renderCust(); fillDatalists();
-  toast(added + ' added, ' + upd + ' updated');
+  toast(added + ' added, ' + upd + ' updated' + (skip ? ', ' + skip + ' skipped' : ''));
 };
 
 $('bCAdd').onclick = ()=>{
