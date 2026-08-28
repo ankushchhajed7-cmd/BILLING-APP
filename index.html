@@ -2,16 +2,19 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v2.7  (28-08-2026)
+  Version : v2.8  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
-  v2.7 - Dotted line between items in the text bill, and an "="
-         before the amount (also stops WhatsApp from turning
-         "12.50 125.00" into a blue phone-number link).
+  v2.8 - Pick customers straight from the phone's contact list.
+         * Billing screen: "Pick from phone contacts" fills name +
+           mobile and saves the customer in one go
+         * Customers screen: "From contacts" imports many at once
+         * Existing customers are matched by mobile, no duplicates
+  v2.7 - Dotted line between items in the text bill.
   v2.6 - Text bill now looks like the printed estimate.
          * Item table wrapped in a WhatsApp monospace block so the
            qty / rate / amount columns line up
@@ -354,6 +357,7 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
         <input id="cMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
       </div>
     </div>
+    <button class="btn btn-sm full" id="bPickB" style="margin-top:8px">Pick from phone contacts</button>
   </div>
 
   <div class="card">
@@ -486,7 +490,13 @@ Tea Powder 250g, 108, 125"></textarea>
         <input id="ncMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
       </div>
     </div>
-    <button class="btn-gold full" id="bCAdd">Save customer</button>
+    <div class="g2">
+      <button class="btn-gold" id="bCAdd">Save customer</button>
+      <button class="btn" id="bPickC">From contacts</button>
+    </div>
+    <p style="color:var(--dim);font-size:12px;line-height:1.5;margin:8px 2px 0">
+      "From contacts" se phone ki contact list khulegi — ek saath kai customer chun sakte ho.
+    </p>
   </div>
 
   <div class="card">
@@ -1342,6 +1352,62 @@ function renderCust(){
   });
 }
 $('cSearch').oninput = renderCust;
+
+/* ---------------- phone contact picker ---------------- */
+async function pickContacts(multiple){
+  if(!(navigator.contacts && navigator.contacts.select)){
+    toast('Contact picker sirf Chrome (Android) mein chalta hai');
+    return null;
+  }
+  try{
+    let want = ['name','tel'];
+    if(navigator.contacts.getProperties){
+      const have = await navigator.contacts.getProperties();
+      want = want.filter(p => have.includes(p));
+    }
+    if(!want.length){ toast('Contact picker available nahi hai'); return null; }
+    return await navigator.contacts.select(want, { multiple });
+  }catch(e){
+    if(e.name !== 'AbortError') toast('Contact nahi mila (' + e.name + ')');
+    return null;
+  }
+}
+function contactBits(c){
+  const name = (c.name && c.name[0]) ? String(c.name[0]).trim() : '';
+  const mob  = (c.tel && c.tel[0]) ? String(c.tel[0]).replace(/\D/g,'').slice(-10) : '';
+  return { name, mob };
+}
+
+$('bPickB').onclick = async ()=>{
+  const res = await pickContacts(false);
+  if(!res || !res.length) return;
+  const { name, mob } = contactBits(res[0]);
+  if(!name && !mob){ toast('Is contact mein naam/number nahi hai'); return; }
+  if(name) $('cName').value = name;
+  if(mob) $('cMob').value = mob;
+  saveCustomer(); save(); fillDatalists();
+  toast(name || mob);
+};
+
+$('bPickC').onclick = async ()=>{
+  const res = await pickContacts(true);
+  if(!res || !res.length) return;
+  let added = 0, upd = 0;
+  res.forEach(c=>{
+    const { name, mob } = contactBits(c);
+    if(!name && !mob) return;
+    const ex = mob ? C.find(x=>x.mobile === mob)
+                   : C.find(x=>x.name.toLowerCase() === name.toLowerCase());
+    if(ex){ if(name) ex.name = name; if(mob) ex.mobile = mob; upd++; }
+    else {
+      C.push({ id:'c'+Date.now()+Math.random().toString(36).slice(2,5),
+               name: name || mob, mobile: mob, since:Date.now(), bills:0, spent:0 });
+      added++;
+    }
+  });
+  save(); renderCust(); fillDatalists();
+  toast(added + ' added, ' + upd + ' updated');
+};
 
 $('bCAdd').onclick = ()=>{
   const name = $('ncName').value.trim();
