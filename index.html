@@ -2,13 +2,17 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.3  (28-08-2026)
+  Version : v1.4  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.4 - "Later" folder for products whose rate isn't known yet.
+         * Tabs: Pending / Later / Main
+         * ⏱ parks a pending product in Later, ↩ sends it back
+         * Rate can be typed in Later too — it jumps straight to Main
   v1.3 - Rate pending / Main list split.
          * Product with no sell rate sits in "Rate pending"
          * Type the rate, tap ✓, it moves to "Main list"
@@ -221,9 +225,13 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 .sug .none{padding:13px;color:var(--dim);font-size:13px;text-align:center;line-height:1.5}
 
 /* ---------- pending rate entry ---------- */
-.qr{width:84px;padding:8px 9px;text-align:right;font-weight:600}
+.qr{width:74px;padding:8px;text-align:right;font-weight:600}
 .seg b{font-weight:700;opacity:.85;margin-left:3px}
-.lrow.pend .main b{white-space:normal}
+.seg.three button{font-size:12px;padding:8px 3px;letter-spacing:0}
+.lrow.pend{gap:7px}
+.lrow.pend .main b{white-space:normal;font-size:14px;line-height:1.25}
+.btn-ico{padding:8px 9px;font-size:14px;border-radius:9px;line-height:1}
+.btn-later{background:#12332C;border:1px solid var(--line);color:var(--brass)}
 
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
@@ -390,16 +398,17 @@ Tea Powder 250g, 108, 125"></textarea>
 
   <div class="card">
     <div class="ttl">Product list <span class="hint" id="pCount2">0</span></div>
-    <div class="seg" style="margin-bottom:10px">
-      <button id="tabPend" class="on">Rate pending <b id="nPend">0</b></button>
-      <button id="tabMain">Main list <b id="nMain">0</b></button>
+    <div class="seg three" style="margin-bottom:10px">
+      <button id="tabPend" class="on">Pending <b id="nPend">0</b></button>
+      <button id="tabLater">Later <b id="nLater">0</b></button>
+      <button id="tabMain">Main <b id="nMain">0</b></button>
     </div>
     <input id="pSearch" placeholder="Search product" autocomplete="off" style="margin-bottom:10px">
     <div id="prodList"></div>
     <button class="btn full btn-sm" id="bClearRates" style="margin-top:12px">Clear all sell rates</button>
     <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:8px 2px 0">
-      Type a sell rate and tap ✓ — the product moves straight to the main list. Anything you don't
-      stock, delete with ✕.
+      Type a rate and tap ✓ — the product moves to Main. Tap ⏱ to park it in Later when you don't
+      know the rate yet. ✕ deletes it.
     </p>
   </div>
 </section>
@@ -543,33 +552,42 @@ function findProd(name){
 let prodTab = 'pending';
 function renderProd(){
   const q = $('pSearch').value.trim().toLowerCase();
-  const pend = P.filter(p => !num(p.sell));
-  const main = P.filter(p => num(p.sell) > 0);
+  const pend  = P.filter(p => !num(p.sell) && !p.later);
+  const later = P.filter(p => !num(p.sell) && p.later);
+  const main  = P.filter(p => num(p.sell) > 0);
   $('nPend').textContent = pend.length;
+  $('nLater').textContent = later.length;
   $('nMain').textContent = main.length;
   $('pCount').textContent = P.length + ' products';
 
-  const base = prodTab === 'pending' ? pend : main;
+  const base = prodTab === 'pending' ? pend : prodTab === 'later' ? later : main;
   const list = q ? base.filter(p => p.name.toLowerCase().includes(q) || (p.mar||'').includes(q)) : base;
   $('pCount2').textContent = list.length + (q ? ' found' : '');
 
   const box = $('prodList');
   if(!list.length){
     box.innerHTML = '<div class="empty"><b>' +
-      (q ? 'Nothing found' : prodTab === 'pending' ? 'All rates are done' : 'Main list is empty') + '</b>' +
+      (q ? 'Nothing found'
+         : prodTab === 'pending' ? 'Pending is clear'
+         : prodTab === 'later' ? 'Nothing parked here'
+         : 'Main list is empty') + '</b>' +
       (q ? 'Try a shorter word.'
-         : prodTab === 'pending' ? 'Every product has a sell rate.'
-         : 'Add a sell rate to a pending product and it lands here.') + '</div>';
+         : prodTab === 'pending' ? 'Every product has a rate or is parked in Later.'
+         : prodTab === 'later' ? 'Tap ⏱ on a pending product to park it for later.'
+         : 'Add a rate to a pending product and it lands here.') + '</div>';
     return;
   }
 
   box.innerHTML = list.slice(0,400).map(p=>{
-    if(prodTab === 'pending'){
+    if(prodTab !== 'main'){
       return '<div class="lrow pend"><div class="main"><b>'+esc(p.name)+'</b>' +
         (num(p.pur) ? '<small>Purchase '+money(p.pur)+'</small>' : '') + '</div>' +
         '<input class="qr num" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Rate" data-rate="'+esc(p.id)+'">' +
-        '<button class="btn-gold btn-sm" data-set="'+esc(p.id)+'">✓</button>' +
-        '<button class="btn-x" data-del="'+esc(p.id)+'">✕</button></div>';
+        '<button class="btn-gold btn-ico" data-set="'+esc(p.id)+'">✓</button>' +
+        (prodTab === 'pending'
+          ? '<button class="btn-later btn-ico" data-later="'+esc(p.id)+'">⏱</button>'
+          : '<button class="btn-later btn-ico" data-back="'+esc(p.id)+'">↩</button>') +
+        '<button class="btn-x btn-ico" data-del="'+esc(p.id)+'">✕</button></div>';
     }
     const m = num(p.sell) - num(p.pur);
     return '<div class="lrow"><div class="main"><b>'+esc(p.name)+'</b><small>'+
@@ -594,6 +612,14 @@ function renderProd(){
     $('pName').scrollIntoView({behavior:'smooth',block:'center'});
   });
   box.querySelectorAll('[data-set]').forEach(b=> b.onclick = ()=> setRate(b.dataset.set));
+  box.querySelectorAll('[data-later]').forEach(b=> b.onclick = ()=>{
+    const p = P.find(x=>x.id === b.dataset.later); if(!p) return;
+    p.later = true; save(); renderProd(); toast(p.name + ' → Later');
+  });
+  box.querySelectorAll('[data-back]').forEach(b=> b.onclick = ()=>{
+    const p = P.find(x=>x.id === b.dataset.back); if(!p) return;
+    p.later = false; save(); renderProd(); toast(p.name + ' → Pending');
+  });
   box.querySelectorAll('[data-rate]').forEach(inp=>{
     inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); setRate(inp.dataset.rate); } });
   });
@@ -605,30 +631,28 @@ function setRate(id){
   if(!p || !inp) return;
   const r = num(inp.value);
   if(r <= 0){ toast('Enter a sell rate first'); inp.focus(); return; }
-  p.sell = r;
+  p.sell = r; p.later = false;
   save(); renderProd(); fillDatalists();
-  toast(p.name + ' → main list');
+  toast(p.name + ' → Main');
 }
 
-$('tabPend').onclick = ()=>{
-  prodTab = 'pending';
-  $('tabPend').classList.add('on'); $('tabMain').classList.remove('on');
+function setTab(t){
+  prodTab = t;
+  $('tabPend').classList.toggle('on', t === 'pending');
+  $('tabLater').classList.toggle('on', t === 'later');
+  $('tabMain').classList.toggle('on', t === 'main');
   renderProd();
-};
-$('tabMain').onclick = ()=>{
-  prodTab = 'main';
-  $('tabMain').classList.add('on'); $('tabPend').classList.remove('on');
-  renderProd();
-};
+}
+$('tabPend').onclick = ()=> setTab('pending');
+$('tabLater').onclick = ()=> setTab('later');
+$('tabMain').onclick = ()=> setTab('main');
 
 $('bClearRates').onclick = ()=>{
   const n = P.filter(p=>num(p.sell) > 0).length;
   if(!n){ toast('No sell rates to clear'); return; }
-  if(!confirm('Clear the sell rate of all ' + n + ' products? They all move to Rate pending. Purchase rates and names stay.')) return;
-  P.forEach(p=> p.sell = 0);
-  save(); prodTab = 'pending';
-  $('tabPend').classList.add('on'); $('tabMain').classList.remove('on');
-  renderProd(); fillDatalists();
+  if(!confirm('Clear the sell rate of all ' + n + ' products? They all move to Pending. Purchase rates and names stay.')) return;
+  P.forEach(p=>{ p.sell = 0; });
+  save(); setTab('pending'); fillDatalists();
   toast(n + ' rates cleared');
 };
 $('pSearch').oninput = renderProd;
