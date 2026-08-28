@@ -2,13 +2,17 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.6  (28-08-2026)
+  Version : v1.7  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.7 - Bill image goes straight to the customer's chat.
+         * Preview shows "Send to <customer>" — copies the image and
+           opens that customer's WhatsApp chat, no contact search
+         * "Share…" still there when you want to pick someone else
   v1.6 - Customer list simplified.
          * Rows show only name + mobile (bill totals live in Saved bills)
          * "Add customer" form to enter names manually
@@ -522,7 +526,8 @@ Tea Powder 250g, 108, 125"></textarea>
   <div class="grip"></div>
   <div class="ttl" id="sheetTtl" style="font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);text-transform:uppercase;margin-bottom:10px">Message preview</div>
   <div class="bill-preview" id="sheetBody"></div>
-  <div class="g2" style="margin-top:12px">
+  <button class="btn-wa full" id="bWAdirect" style="margin-top:12px;display:none">Send</button>
+  <div class="g2" style="margin-top:8px">
     <button class="btn" id="bCopy">Copy text</button>
     <button class="btn-gold" id="bCloseSheet">Close</button>
   </div>
@@ -940,6 +945,7 @@ $('bPreview').onclick = ()=>{
   $('sheetTtl').textContent = 'Message preview';
   $('sheetBody').style.background = '#071C18';
   $('sheetBody').textContent = buildMsg(S.lang);
+  $('bWAdirect').style.display = 'none';
   $('bCopy').textContent = 'Copy text';
   $('bCopy').dataset.mode = 'txt';
   $('bCopy').className = 'btn';
@@ -1134,6 +1140,7 @@ let lastBlob = null;
 $('bWA').onclick = async ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
   const bill = saveBill(true);
+  const mob = (bill.cMobile || '').replace(/\D/g,'');
   toast('Making the bill image…');
   const canvas = await drawBill(bill, S.lang);
   canvas.toBlob(blob=>{
@@ -1142,11 +1149,30 @@ $('bWA').onclick = async ()=>{
     $('sheetTtl').textContent = 'Bill #' + bill.no;
     $('sheetBody').innerHTML = '<img src="'+url+'" alt="" style="width:100%;border-radius:8px;display:block">';
     $('sheetBody').style.background = '#fff';
-    $('bCopy').textContent = 'Share on WhatsApp';
+    $('bCopy').textContent = 'Share…';
     $('bCopy').dataset.mode = 'img';
-    $('bCopy').className = 'btn-wa';
+    $('bCopy').className = 'btn';
+    const dbtn = $('bWAdirect');
+    if(mob.length >= 10){
+      dbtn.style.display = 'block';
+      dbtn.textContent = 'Send to ' + (bill.cName || mob);
+      dbtn.dataset.mob = mob.length === 10 ? '91' + mob : mob;
+    } else {
+      dbtn.style.display = 'none';
+    }
     $('sheet').classList.add('on');
   }, 'image/png');
+};
+
+$('bWAdirect').onclick = ()=>{
+  if(!lastBlob) return;
+  try{
+    navigator.clipboard.write([ new ClipboardItem({ 'image/png': lastBlob }) ])
+      .then(()=> toast('Image copied — long-press the message box and Paste'))
+      .catch(()=> toast('Copy failed — use Share instead'));
+  }catch(e){ toast('Copy failed — use Share instead'); }
+  window.open('https://wa.me/' + $('bWAdirect').dataset.mob, '_blank');
+  $('sheet').classList.remove('on');
 };
 
 async function shareImage(){
