@@ -2,13 +2,17 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.1  (28-08-2026)
+  Version : v1.2  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.2 - Product search dropdown.
+         * First letter typed = numbered match list (1,2,3...) below the box
+         * Shows sell rate next to each match, tap to fill
+         * Same numbered search on the customer name box
   v1.1 - Installable on mobile. Home-screen name "BILL".
          * Real manifest.json + PNG icons + service worker
          * "Install app" button appears when Chrome allows it
@@ -192,6 +196,24 @@ nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width
 nav button.on{color:var(--brass)}
 nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 
+/* ---------- search dropdown ---------- */
+.sugwrap{position:relative}
+.sug{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:25;display:none;
+  background:linear-gradient(180deg,#154137,#0A2620);border:1px solid var(--brass);border-radius:12px;
+  overflow:auto;max-height:266px;-webkit-overflow-scrolling:touch;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+.sug.on{display:block}
+.sug .r{display:flex;align-items:center;gap:9px;padding:10px 11px;cursor:pointer;
+  border-bottom:1px solid rgba(216,166,61,.14)}
+.sug .r:last-child{border-bottom:0}
+.sug .r.sel{background:rgba(216,166,61,.18)}
+.sug .sn{width:23px;height:23px;flex:0 0 auto;border-radius:7px;display:grid;place-items:center;
+  font-size:11px;font-weight:700;color:#241800;background:linear-gradient(180deg,#F7E2A6,#D8A63D 60%,#B0821F);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+.sug .nm{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sug .nm i{font-style:normal;color:var(--brass-lt);background:rgba(216,166,61,.2);border-radius:3px}
+.sug .rt{font-size:12.5px;color:var(--brass);white-space:nowrap}
+.sug .none{padding:13px;color:var(--dim);font-size:13px;text-align:center;line-height:1.5}
+
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
   background:linear-gradient(180deg,#F7E2A6,#D8A63D);color:#241800;padding:11px 18px;border-radius:11px;
@@ -245,24 +267,24 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
   <div class="card">
     <div class="ttl">Customer <span class="hint">saves automatically</span></div>
     <div class="g2">
-      <div>
+      <div class="sugwrap">
         <label for="cName">Name</label>
-        <input id="cName" list="dlCust" placeholder="Customer name" autocomplete="off">
+        <input id="cName" placeholder="Customer name" autocomplete="off">
+        <div class="sug" id="cSug"></div>
       </div>
       <div>
         <label for="cMob">Mobile</label>
         <input id="cMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
       </div>
     </div>
-    <datalist id="dlCust"></datalist>
   </div>
 
   <div class="card">
     <div class="ttl">Add item <span class="hint" id="pCount">0 products</span></div>
-    <div style="margin-bottom:8px">
+    <div class="sugwrap" style="margin-bottom:8px">
       <label for="iName">Product</label>
-      <input id="iName" list="dlProd" placeholder="Type product name" autocomplete="off">
-      <datalist id="dlProd"></datalist>
+      <input id="iName" placeholder="Type first letter" autocomplete="off">
+      <div class="sug" id="iSug"></div>
     </div>
     <div class="g3">
       <div>
@@ -572,19 +594,107 @@ $('bBulk').onclick = ()=>{
   toast(added + ' added, ' + updated + ' updated');
 };
 
-/* ---------------- datalists ---------------- */
+/* ---------------- counters ---------------- */
 function fillDatalists(){
-  $('dlProd').innerHTML = P.map(p=>'<option value="'+esc(p.name)+'">').join('');
-  $('dlCust').innerHTML = C.map(c=>'<option value="'+esc(c.name)+'">').join('');
   $('pCount').textContent = P.length + ' products';
 }
 
 /* ---------------- billing ---------------- */
-$('iName').oninput = ()=>{
-  const p = findProd($('iName').value);
-  if(p && p.sell) $('iRate').value = p.sell;
-};
-$('iName').onchange = $('iName').oninput;
+/* ---------------- product search dropdown ---------------- */
+let pList = [], pIx = -1, cList = [], cIx = -1;
+
+function hl(name, q){
+  const i = name.toLowerCase().indexOf(q);
+  if(i < 0) return esc(name);
+  return esc(name.slice(0,i)) + '<i>' + esc(name.slice(i, i+q.length)) + '</i>' + esc(name.slice(i+q.length));
+}
+
+function showProdSug(){
+  const box = $('iSug'), q = $('iName').value.trim().toLowerCase();
+  if(!q){ box.classList.remove('on'); pList = []; return; }
+  const starts = [], has = [];
+  P.forEach(p=>{
+    const n = p.name.toLowerCase();
+    if(n.startsWith(q)) starts.push(p);
+    else if(n.includes(q) || (p.mar||'').includes(q)) has.push(p);
+  });
+  pList = starts.concat(has).slice(0,50);
+  pIx = -1;
+  box.innerHTML = pList.length
+    ? pList.map((p,i)=>'<div class="r" data-i="'+i+'"><span class="sn">'+(i+1)+'</span>' +
+        '<span class="nm">'+hl(p.name,q)+'</span>' +
+        '<span class="rt">'+(p.sell ? money(p.sell) : '—')+'</span></div>').join('')
+    : '<div class="none">No match. Type the full name and press Add — it saves as a new product.</div>';
+  box.classList.add('on');
+  box.querySelectorAll('.r').forEach(r=>{
+    r.addEventListener('pointerdown', e=>{ e.preventDefault(); pickProd(pList[+r.dataset.i]); });
+  });
+}
+function pickProd(p){
+  if(!p) return;
+  $('iName').value = p.name;
+  if(p.sell) $('iRate').value = p.sell;
+  $('iSug').classList.remove('on');
+  $('iQty').focus(); $('iQty').select();
+}
+function moveSug(box, list, ix, dir){
+  const rows = box.querySelectorAll('.r');
+  if(!rows.length) return ix;
+  ix = (ix + dir + rows.length) % rows.length;
+  rows.forEach(r=>r.classList.remove('sel'));
+  rows[ix].classList.add('sel');
+  rows[ix].scrollIntoView({block:'nearest'});
+  return ix;
+}
+$('iName').addEventListener('input', showProdSug);
+$('iName').addEventListener('focus', showProdSug);
+$('iName').addEventListener('blur', ()=> setTimeout(()=> $('iSug').classList.remove('on'), 160));
+$('iName').addEventListener('keydown', e=>{
+  if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+    e.preventDefault(); pIx = moveSug($('iSug'), pList, pIx, e.key === 'ArrowDown' ? 1 : -1);
+  } else if(e.key === 'Enter'){
+    if(pList.length){ e.preventDefault(); pickProd(pList[pIx < 0 ? 0 : pIx]); }
+  } else if(e.key === 'Escape'){ $('iSug').classList.remove('on'); }
+});
+
+/* ---------------- customer search dropdown ---------------- */
+function showCustSug(){
+  const box = $('cSug'), q = $('cName').value.trim().toLowerCase();
+  if(!q){ box.classList.remove('on'); cList = []; return; }
+  const starts = [], has = [];
+  C.forEach(c=>{
+    const n = c.name.toLowerCase();
+    if(n.startsWith(q)) starts.push(c);
+    else if(n.includes(q) || (c.mobile||'').includes(q)) has.push(c);
+  });
+  cList = starts.concat(has).slice(0,50);
+  cIx = -1;
+  if(!cList.length){ box.classList.remove('on'); return; }
+  box.innerHTML = cList.map((c,i)=>'<div class="r" data-i="'+i+'"><span class="sn">'+(i+1)+'</span>' +
+    '<span class="nm">'+hl(c.name,q)+'</span><span class="rt">'+(c.mobile||'')+'</span></div>').join('');
+  box.classList.add('on');
+  box.querySelectorAll('.r').forEach(r=>{
+    r.addEventListener('pointerdown', e=>{
+      e.preventDefault();
+      const c = cList[+r.dataset.i];
+      $('cName').value = c.name; if(c.mobile) $('cMob').value = c.mobile;
+      box.classList.remove('on'); $('iName').focus();
+    });
+  });
+}
+$('cName').addEventListener('input', showCustSug);
+$('cName').addEventListener('focus', showCustSug);
+$('cName').addEventListener('blur', ()=> setTimeout(()=> $('cSug').classList.remove('on'), 160));
+$('cName').addEventListener('keydown', e=>{
+  if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+    e.preventDefault(); cIx = moveSug($('cSug'), cList, cIx, e.key === 'ArrowDown' ? 1 : -1);
+  } else if(e.key === 'Enter' && cList.length){
+    e.preventDefault();
+    const c = cList[cIx < 0 ? 0 : cIx];
+    $('cName').value = c.name; if(c.mobile) $('cMob').value = c.mobile;
+    $('cSug').classList.remove('on'); $('cMob').focus();
+  } else if(e.key === 'Escape'){ $('cSug').classList.remove('on'); }
+});
 
 $('cMob').oninput = ()=>{
   const m = $('cMob').value.replace(/\D/g,'');
@@ -593,10 +703,10 @@ $('cMob').oninput = ()=>{
     if(c && !$('cName').value.trim()) $('cName').value = c.name;
   }
 };
-$('cName').onchange = ()=>{
+$('cName').addEventListener('change', ()=>{
   const c = C.find(x=>x.name.toLowerCase() === $('cName').value.trim().toLowerCase());
   if(c && !$('cMob').value.trim()) $('cMob').value = c.mobile;
-};
+});
 
 $('bAdd').onclick = addItem;
 $('iQty').addEventListener('keydown', e=>{ if(e.key==='Enter') addItem(); });
