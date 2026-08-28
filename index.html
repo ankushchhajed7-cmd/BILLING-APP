@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<!--
+=============================================================
+  ANKUSH KIRANA — Billing PWA
+  Version : v1.1  (28-08-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v1.1 - Installable on mobile. Home-screen name "BILL".
+         * Real manifest.json + PNG icons + service worker
+         * "Install app" button appears when Chrome allows it
+         * Works offline after first open
+  v1.0 - First build.
+         * Product master (Name / Purchase rate / Sell rate)
+         * Bulk product paste-import (auto save, no duplicates)
+         * Customer auto-save on billing (name + mobile)
+         * Bill on screen in English, WhatsApp in Marathi/English
+         * Dashboard: sale, profit, quantity, top items, 7-day bar
+         * Backup export / import (JSON)
+=============================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08201C">
+<title>BILL — Ankush Kirana</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Khand:wght@500;600;700&family=Mukta:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BILL">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root{
+  --ink:#08201C; --ink2:#0C2A24; --ink3:#113831;
+  --brass:#D8A63D; --brass-lt:#F7E2A6; --brass-dk:#8A6416;
+  --text:#EAF4F0; --dim:#8FB0A7;
+  --line:rgba(216,166,61,.22);
+  --danger:#E2705A;
+  --f-disp:'Khand',"Segoe UI",system-ui,sans-serif;
+  --f-body:'Mukta',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(900px 400px at 50% -10%, #14403709, transparent),
+    linear-gradient(180deg,#08201C,#061916 60%,#08201C);
+  color:var(--text);font-family:var(--f-body);font-size:15px;
+  min-height:100dvh;padding-bottom:78px;
+}
+h1,h2,h3,.disp{font-family:var(--f-disp);font-weight:600;letter-spacing:.4px;margin:0}
+input,select,textarea,button{font-family:var(--f-body);font-size:15px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+header{
+  position:sticky;top:0;z-index:20;padding:10px 12px 12px;
+  background:linear-gradient(180deg,#0A2620 70%,rgba(8,32,28,.86));
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+}
+.plate{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;
+  background:linear-gradient(180deg,#F7E2A6 0%,#D8A63D 16%,#A6791D 52%,#D8A63D 76%,#F2D68F 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),inset 0 -2px 3px rgba(0,0,0,.35),0 6px 16px rgba(0,0,0,.4);
+  color:#2A1D02;position:relative;overflow:hidden;
+}
+.plate::after{
+  content:"";position:absolute;inset:0;transform:translateX(-120%) skewX(-18deg);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
+  width:45%;animation:sheen 7s ease-in-out infinite;
+}
+@keyframes sheen{0%,72%{transform:translateX(-140%) skewX(-18deg)}88%,100%{transform:translateX(320%) skewX(-18deg)}}
+.plate .mark{
+  width:34px;height:34px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;
+  background:linear-gradient(180deg,#123A32,#08201C);color:var(--brass-lt);
+  font-family:var(--f-disp);font-size:19px;box-shadow:inset 0 1px 0 rgba(255,255,255,.15);
+}
+.plate h1{font-size:21px;line-height:1;letter-spacing:1.2px}
+.plate small{display:block;font-size:11px;letter-spacing:2.4px;opacity:.72;margin-top:2px}
+.plate .right{margin-left:auto;text-align:right;font-size:11px;line-height:1.3;opacity:.8}
+
+/* ---------- layout ---------- */
+main{padding:12px 12px 8px;max-width:640px;margin:0 auto}
+.view{display:none;animation:fade .18s ease}
+.view.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.card{
+  background:linear-gradient(180deg,var(--ink3),var(--ink2));
+  border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 4px 14px rgba(0,0,0,.28);
+}
+.card>.ttl{font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);
+  text-transform:uppercase;margin:-2px 0 10px;display:flex;align-items:center;gap:8px}
+.card>.ttl .hint{margin-left:auto;font-family:var(--f-body);font-size:11px;letter-spacing:0;
+  color:var(--dim);text-transform:none}
+.row{display:flex;gap:8px}
+.row>*{min-width:0}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+label{display:block;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--dim);margin:0 0 4px 2px}
+input,select,textarea{
+  width:100%;padding:11px 12px;border-radius:10px;border:1px solid rgba(216,166,61,.25);
+  background:#071C18;color:var(--text);outline:none;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(216,166,61,.14)}
+textarea{min-height:120px;resize:vertical;line-height:1.5}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--brass) 50%),linear-gradient(135deg,var(--brass) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 19px,calc(100% - 12px) 19px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+
+/* ---------- buttons ---------- */
+button{border:0;border-radius:11px;padding:12px 14px;font-weight:600;cursor:pointer}
+.btn{background:#12332C;color:var(--text);border:1px solid var(--line)}
+.btn:active{transform:translateY(1px)}
+.btn-gold{
+  color:#241800;
+  background:linear-gradient(180deg,#F7E2A6,#D8A63D 45%,#B0821F 55%,#E7C877);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -2px 2px rgba(0,0,0,.3),0 4px 12px rgba(0,0,0,.35);
+}
+.btn-wa{background:linear-gradient(180deg,#3FCF6B,#1E9E4B 55%,#37C063);color:#04240F;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 12px rgba(0,0,0,.35)}
+.btn-sm{padding:8px 10px;font-size:13px;border-radius:9px}
+.btn-x{background:transparent;border:1px solid rgba(226,112,90,.4);color:var(--danger);padding:7px 9px;border-radius:9px;font-size:13px}
+.full{width:100%}
+
+/* ---------- bill items ---------- */
+.item{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;
+  padding:9px 0;border-bottom:1px dashed rgba(216,166,61,.16)}
+.item:last-child{border-bottom:0}
+.item .nm{font-weight:600;line-height:1.25}
+.item .sub{font-size:12px;color:var(--dim)}
+.item .amt{font-weight:700;color:var(--brass-lt)}
+.totrow{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;color:var(--dim)}
+.totrow b{color:var(--text);font-weight:600}
+.grand{
+  margin-top:10px;padding:14px 16px;border-radius:13px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,#F7E2A6 0%,#D8A63D 15%,#9E7318 52%,#D8A63D 78%,#F5DC98 100%);
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.85),inset 0 -3px 4px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.45);
+  color:#231701;display:flex;align-items:baseline;justify-content:space-between;
+}
+.grand::after{content:"";position:absolute;inset:0;width:40%;transform:translateX(-140%) skewX(-18deg);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:sheen 7s ease-in-out infinite}
+.grand span{font-family:var(--f-disp);font-size:15px;letter-spacing:1.6px;text-transform:uppercase}
+.grand strong{font-family:var(--f-disp);font-size:32px;line-height:1}
+
+/* ---------- lists ---------- */
+.lrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(216,166,61,.12)}
+.lrow:last-child{border-bottom:0}
+.lrow .main{flex:1;min-width:0}
+.lrow .main b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow .main small{color:var(--dim);font-size:12px}
+.tag{font-size:11px;padding:3px 7px;border-radius:6px;background:rgba(216,166,61,.14);color:var(--brass);white-space:nowrap}
+.empty{text-align:center;color:var(--dim);padding:22px 10px;font-size:14px;line-height:1.6}
+.empty b{display:block;color:var(--brass);font-family:var(--f-disp);font-size:17px;letter-spacing:1px;margin-bottom:4px}
+
+/* ---------- dashboard tiles (2-colour, mirror finish) ---------- */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.tile{border-radius:14px;padding:13px 14px;position:relative;overflow:hidden;min-height:88px;
+  display:flex;flex-direction:column;justify-content:space-between}
+.tile::after{content:"";position:absolute;inset:0;width:42%;transform:translateX(-150%) skewX(-18deg);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:sheen 9s ease-in-out infinite}
+.tile.gold{background:linear-gradient(180deg,#F7E2A6 0%,#D8A63D 14%,#A2751A 54%,#D8A63D 80%,#F3D894 100%);
+  color:#251900;box-shadow:inset 0 1px 0 rgba(255,255,255,.8),inset 0 -2px 3px rgba(0,0,0,.35),0 6px 16px rgba(0,0,0,.4)}
+.tile.green{background:linear-gradient(180deg,#2C6F60 0%,#1A4A40 16%,#0B2C26 55%,#1A4A40 82%,#2E7365 100%);
+  color:var(--brass-lt);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -2px 3px rgba(0,0,0,.5),0 6px 16px rgba(0,0,0,.4)}
+.tile .k{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;opacity:.75;font-weight:600}
+.tile .v{font-family:var(--f-disp);font-size:27px;line-height:1}
+.tile .s{font-size:11.5px;opacity:.7}
+.chart{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;height:100%}
+.bar i{display:block;width:100%;border-radius:5px 5px 2px 2px;min-height:3px;
+  background:linear-gradient(180deg,#F7E2A6,#D8A63D 40%,#8A6416);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+.bar u{font-size:10px;color:var(--dim);text-decoration:none}
+.bar em{font-size:10px;color:var(--brass);font-style:normal}
+
+/* ---------- nav ---------- */
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);
+  background:linear-gradient(180deg,#0B2A24,#061916);border-top:1px solid var(--line);
+  padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(0,0,0,.45)}
+nav button{background:none;border:0;color:var(--dim);display:flex;flex-direction:column;align-items:center;
+  gap:3px;padding:5px 2px;font-size:10.5px;letter-spacing:.6px;font-weight:600;text-transform:uppercase}
+nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--brass)}
+nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
+
+/* ---------- misc ---------- */
+.toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
+  background:linear-gradient(180deg,#F7E2A6,#D8A63D);color:#241800;padding:11px 18px;border-radius:11px;
+  font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.5);transition:.22s;max-width:90vw;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.seg{display:flex;background:#071C18;border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;padding:8px;border-radius:8px;background:transparent;color:var(--dim);font-size:13px}
+.seg button.on{background:linear-gradient(180deg,#F7E2A6,#D8A63D);color:#241800}
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(3,12,10,.72);display:none;align-items:flex-end}
+.sheet.on{display:flex}
+.sheet .inner{width:100%;max-width:640px;margin:0 auto;background:linear-gradient(180deg,#123831,#0A2620);
+  border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:16px 14px calc(20px + env(safe-area-inset-bottom));
+  max-height:88dvh;overflow:auto}
+.grip{width:42px;height:4px;border-radius:4px;background:rgba(216,166,61,.35);margin:0 auto 12px}
+.bill-preview{background:#071C18;border:1px solid var(--line);border-radius:12px;padding:14px;
+  font-size:13px;line-height:1.65;white-space:pre-wrap;word-break:break-word;max-height:44vh;overflow:auto}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="plate">
+    <div class="mark">AK</div>
+    <div>
+      <h1 id="hShop">ANKUSH KIRANA</h1>
+      <small>KIRANA &amp; GENERAL STORE</small>
+    </div>
+    <div class="right" id="hMeta">Bill #1<br>—</div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ BILLING ============ -->
+<section id="v-bill" class="view on">
+  <div class="card" id="installBar" style="display:none">
+    <div class="ttl">Install on this phone <span class="hint">opens like a normal app</span></div>
+    <div class="row" style="align-items:center;gap:10px">
+      <img src="icon-192.png" alt="" width="44" height="44" style="border-radius:11px;flex:0 0 auto">
+      <div style="flex:1;font-size:13.5px;line-height:1.45;color:var(--dim)">
+        Adds <b style="color:var(--text)">BILL</b> to your home screen. No browser bar, works without internet.
+      </div>
+    </div>
+    <div class="g2" style="margin-top:10px">
+      <button class="btn-gold" id="bInstall">Install app</button>
+      <button class="btn" id="bInstallNo">Not now</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Customer <span class="hint">saves automatically</span></div>
+    <div class="g2">
+      <div>
+        <label for="cName">Name</label>
+        <input id="cName" list="dlCust" placeholder="Customer name" autocomplete="off">
+      </div>
+      <div>
+        <label for="cMob">Mobile</label>
+        <input id="cMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
+      </div>
+    </div>
+    <datalist id="dlCust"></datalist>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Add item <span class="hint" id="pCount">0 products</span></div>
+    <div style="margin-bottom:8px">
+      <label for="iName">Product</label>
+      <input id="iName" list="dlProd" placeholder="Type product name" autocomplete="off">
+      <datalist id="dlProd"></datalist>
+    </div>
+    <div class="g3">
+      <div>
+        <label for="iQty">Qty</label>
+        <input id="iQty" type="number" inputmode="decimal" step="0.01" min="0" value="1" class="num">
+      </div>
+      <div>
+        <label for="iRate">Sell rate</label>
+        <input id="iRate" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" class="num">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn-gold full" id="bAdd">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Bill <span class="hint" id="itemCount">0 items</span></div>
+    <div id="cartList"><div class="empty"><b>No items yet</b>Add a product above to start the bill.</div></div>
+    <div style="margin-top:10px">
+      <div class="totrow"><span>Subtotal</span><b class="num" id="tSub">₹0.00</b></div>
+      <div class="totrow" style="align-items:center">
+        <span>Discount ₹</span>
+        <input id="tDisc" type="number" inputmode="decimal" min="0" step="0.01" value="0"
+               class="num" style="width:110px;padding:7px 10px;text-align:right">
+      </div>
+      <div class="grand"><span>Payable</span><strong class="num" id="tGrand">₹0.00</strong></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Send bill</div>
+    <label>WhatsApp language</label>
+    <div class="seg" style="margin-bottom:10px">
+      <button id="lgMr" class="on">मराठी (Marathi)</button>
+      <button id="lgEn">English</button>
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <button class="btn-gold" id="bSave">Save changes</button>
+      <button class="btn-wa" id="bWA">Send on WhatsApp</button>
+    </div>
+    <div class="g2">
+      <button class="btn" id="bPreview">Preview message</button>
+      <button class="btn" id="bClear">New bill</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRODUCTS ============ -->
+<section id="v-prod" class="view">
+  <div class="card">
+    <div class="ttl">Add product</div>
+    <div style="margin-bottom:8px">
+      <label for="pName">Product name</label>
+      <input id="pName" placeholder="e.g. Sugar 1kg" autocomplete="off">
+    </div>
+    <div style="margin-bottom:8px">
+      <label for="pMar">Marathi name <span style="text-transform:none;letter-spacing:0">— optional, used in WhatsApp bill</span></label>
+      <input id="pMar" placeholder="उदा. साखर १ किलो" autocomplete="off">
+    </div>
+    <div class="g3">
+      <div>
+        <label for="pPur">Purchase rate</label>
+        <input id="pPur" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" class="num">
+      </div>
+      <div>
+        <label for="pSell">Sell rate</label>
+        <input id="pSell" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" class="num">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn-gold full" id="bPAdd">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Bulk add <span class="hint">one product per line</span></div>
+    <textarea id="pBulk" placeholder="Name | Purchase | Sell | Marathi name
+
+Sugar 1kg | 42 | 48 | साखर १ किलो
+Toor Dal 1kg | 118 | 135
+Parle-G
+Tea Powder 250g, 108, 125"></textarea>
+    <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:8px 2px 10px">
+      Separator can be <b>|</b> , <b>comma</b> or <b>tab</b>. Rates are optional — name alone is enough,
+      you can fill rates later. A name that already exists gets its rates updated instead of duplicated.
+    </p>
+    <button class="btn-gold full" id="bBulk">Import products</button>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Product list <span class="hint" id="pCount2">0</span></div>
+    <input id="pSearch" placeholder="Search product" autocomplete="off" style="margin-bottom:10px">
+    <div id="prodList"></div>
+  </div>
+</section>
+
+<!-- ============ CUSTOMERS ============ -->
+<section id="v-cust" class="view">
+  <div class="card">
+    <div class="ttl">Customers <span class="hint" id="cCount">0</span></div>
+    <input id="cSearch" placeholder="Search name or mobile" autocomplete="off" style="margin-bottom:10px">
+    <div id="custList"></div>
+  </div>
+  <div class="card">
+    <div class="ttl">Saved bills <span class="hint" id="bCount">0</span></div>
+    <div id="billList"></div>
+  </div>
+</section>
+
+<!-- ============ DASHBOARD ============ -->
+<section id="v-dash" class="view">
+  <div class="tiles">
+    <div class="tile gold"><div class="k">Today sale</div><div><div class="v num" id="dSale">₹0</div><div class="s" id="dBills">0 bills</div></div></div>
+    <div class="tile green"><div class="k">Today profit</div><div><div class="v num" id="dProfit">₹0</div><div class="s">purchase vs sell</div></div></div>
+    <div class="tile green"><div class="k">Today qty</div><div><div class="v num" id="dQty">0</div><div class="s">units sold</div></div></div>
+    <div class="tile gold"><div class="k">Month sale</div><div><div class="v num" id="dMonth">₹0</div><div class="s" id="dMonthQty">0 units</div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Last 7 days</div>
+    <div class="chart" id="chart"></div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Top items by quantity <span class="hint">this month</span></div>
+    <div id="topList"></div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Shop settings</div>
+    <div style="margin-bottom:8px">
+      <label for="sShop">Shop name (English)</label>
+      <input id="sShop" placeholder="ANKUSH KIRANA">
+    </div>
+    <div style="margin-bottom:8px">
+      <label for="sShopMr">Shop name (Marathi)</label>
+      <input id="sShopMr" placeholder="अंकुश किराणा">
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div>
+        <label for="sPhone">Shop mobile</label>
+        <input id="sPhone" type="tel" inputmode="numeric" placeholder="For customer to call">
+      </div>
+      <div>
+        <label for="sBillNo">Next bill no.</label>
+        <input id="sBillNo" type="number" min="1" class="num">
+      </div>
+    </div>
+    <button class="btn-gold full" id="bSet" style="margin-bottom:8px">Save changes</button>
+    <div class="g2">
+      <button class="btn" id="bExport">Backup file</button>
+      <button class="btn" id="bImport">Restore backup</button>
+    </div>
+    <input type="file" id="fImport" accept="application/json,.json" style="display:none">
+    <button class="btn full" id="bInstall2" style="margin-top:8px">Install app on home screen</button>
+    <p id="installHelp" style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0;display:none">
+      Already installed, or Chrome is not offering it yet. You can always use the browser menu (⋮) →
+      <b>Add to Home screen</b>. On iPhone use Share → Add to Home Screen.
+    </p>
+    <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0">
+      All data stays on this phone. Take a backup every few days and keep the file in Drive — clearing
+      browser data will erase everything.
+    </p>
+  </div>
+</section>
+
+</main>
+
+<nav>
+  <button data-v="bill" class="on"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>Billing</button>
+  <button data-v="prod"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Products</button>
+  <button data-v="cust"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>Customers</button>
+  <button data-v="dash"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Dashboard</button>
+</nav>
+
+<div class="sheet" id="sheet"><div class="inner">
+  <div class="grip"></div>
+  <div class="ttl" style="font-family:var(--f-disp);font-size:16px;letter-spacing:1px;color:var(--brass);text-transform:uppercase;margin-bottom:10px">Message preview</div>
+  <div class="bill-preview" id="sheetBody"></div>
+  <div class="g2" style="margin-top:12px">
+    <button class="btn" id="bCopy">Copy text</button>
+    <button class="btn-gold" id="bCloseSheet">Close</button>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ---------------- storage ---------------- */
+const DB = {
+  get(k, d){ try{ const v = JSON.parse(localStorage.getItem(k)); return v === null ? d : v; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ toast('Storage full — take a backup'); } }
+};
+let P = DB.get('ak_products', []);
+let C = DB.get('ak_customers', []);
+let B = DB.get('ak_bills', []);
+let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
+let cart = [];
+let editingBillId = null;
+
+const $ = id => document.getElementById(id);
+const money = n => '₹' + (Math.round(n*100)/100).toFixed(2);
+const money0 = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dstr = d => { const x = new Date(d); return String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'/'+x.getFullYear(); };
+const dkey = d => { const x = new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); };
+
+let toastT;
+function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2200); }
+
+function save(){ DB.set('ak_products',P); DB.set('ak_customers',C); DB.set('ak_bills',B); DB.set('ak_settings',S); }
+
+/* ---------------- navigation ---------------- */
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); $('v-'+b.dataset.v).classList.add('on');
+    window.scrollTo(0,0);
+    if(b.dataset.v==='dash') renderDash();
+    if(b.dataset.v==='cust') renderCust();
+    if(b.dataset.v==='prod') renderProd();
+  };
+});
+
+/* ---------------- products ---------------- */
+function findProd(name){
+  const n = String(name).trim().toLowerCase();
+  return P.find(p => p.name.toLowerCase() === n);
+}
+function renderProd(){
+  const q = $('pSearch').value.trim().toLowerCase();
+  const list = q ? P.filter(p => p.name.toLowerCase().includes(q) || (p.mar||'').includes(q)) : P;
+  $('pCount').textContent = P.length + ' products';
+  $('pCount2').textContent = list.length + (q ? ' found' : '');
+  const box = $('prodList');
+  if(!list.length){
+    box.innerHTML = '<div class="empty"><b>' + (q ? 'Nothing found' : 'No products yet') + '</b>' +
+      (q ? 'Try a shorter word.' : 'Add one above, or paste your whole list in Bulk add.') + '</div>';
+    return;
+  }
+  box.innerHTML = list.slice(0,400).map(p=>{
+    const m = num(p.sell) - num(p.pur);
+    return '<div class="lrow"><div class="main"><b>'+esc(p.name)+'</b><small>'+
+      (p.mar ? esc(p.mar)+' • ' : '') +
+      'Purchase ' + money(p.pur) + ' → Sell ' + money(p.sell) +
+      (p.pur > 0 ? ' • Margin ' + money(m) : '') +
+      '</small></div>' +
+      '<button class="btn btn-sm" data-edit="'+esc(p.id)+'">Edit</button>' +
+      '<button class="btn-x" data-del="'+esc(p.id)+'">✕</button></div>';
+  }).join('');
+  box.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=>{
+    const p = P.find(x=>x.id===b.dataset.del);
+    if(p && confirm('Delete "'+p.name+'" from the product list?')){
+      P = P.filter(x=>x.id!==b.dataset.del); save(); renderProd(); fillDatalists(); toast('Product deleted');
+    }
+  });
+  box.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=>{
+    const p = P.find(x=>x.id===b.dataset.edit); if(!p) return;
+    $('pName').value = p.name; $('pMar').value = p.mar||''; $('pPur').value = p.pur||''; $('pSell').value = p.sell||'';
+    $('bPAdd').textContent = 'Save changes';
+    $('pName').scrollIntoView({behavior:'smooth',block:'center'});
+  });
+}
+$('pSearch').oninput = renderProd;
+
+$('bPAdd').onclick = ()=>{
+  const name = $('pName').value.trim();
+  if(!name){ toast('Enter a product name'); $('pName').focus(); return; }
+  const ex = findProd(name);
+  const data = { name, mar:$('pMar').value.trim(), pur:num($('pPur').value), sell:num($('pSell').value) };
+  if(ex){ Object.assign(ex, data); toast('Product updated'); }
+  else { P.push(Object.assign({ id:'p'+Date.now()+Math.random().toString(36).slice(2,6) }, data)); toast('Product saved'); }
+  P.sort((a,b)=>a.name.localeCompare(b.name));
+  save(); $('pName').value=''; $('pMar').value=''; $('pPur').value=''; $('pSell').value='';
+  $('bPAdd').textContent = 'Save'; renderProd(); fillDatalists();
+};
+
+$('bBulk').onclick = ()=>{
+  const raw = $('pBulk').value.split('\n');
+  let added = 0, updated = 0;
+  raw.forEach(line=>{
+    line = line.trim();
+    if(!line) return;
+    const f = line.split(/\s*[|\t,]\s*/).map(x=>x.trim());
+    const name = f[0]; if(!name) return;
+    if(/^name$/i.test(name)) return;
+    const pur = f.length >= 3 ? num(f[1]) : 0;
+    const sell = f.length >= 3 ? num(f[2]) : (f.length === 2 ? num(f[1]) : 0);
+    const mar = f[3] || '';
+    const ex = findProd(name);
+    if(ex){
+      if(pur) ex.pur = pur; if(sell) ex.sell = sell; if(mar) ex.mar = mar;
+      updated++;
+    } else {
+      P.push({ id:'p'+Date.now()+Math.random().toString(36).slice(2,6), name, mar, pur, sell });
+      added++;
+    }
+  });
+  P.sort((a,b)=>a.name.localeCompare(b.name));
+  save(); $('pBulk').value=''; renderProd(); fillDatalists();
+  toast(added + ' added, ' + updated + ' updated');
+};
+
+/* ---------------- datalists ---------------- */
+function fillDatalists(){
+  $('dlProd').innerHTML = P.map(p=>'<option value="'+esc(p.name)+'">').join('');
+  $('dlCust').innerHTML = C.map(c=>'<option value="'+esc(c.name)+'">').join('');
+  $('pCount').textContent = P.length + ' products';
+}
+
+/* ---------------- billing ---------------- */
+$('iName').oninput = ()=>{
+  const p = findProd($('iName').value);
+  if(p && p.sell) $('iRate').value = p.sell;
+};
+$('iName').onchange = $('iName').oninput;
+
+$('cMob').oninput = ()=>{
+  const m = $('cMob').value.replace(/\D/g,'');
+  if(m.length >= 10){
+    const c = C.find(x=>x.mobile === m.slice(-10));
+    if(c && !$('cName').value.trim()) $('cName').value = c.name;
+  }
+};
+$('cName').onchange = ()=>{
+  const c = C.find(x=>x.name.toLowerCase() === $('cName').value.trim().toLowerCase());
+  if(c && !$('cMob').value.trim()) $('cMob').value = c.mobile;
+};
+
+$('bAdd').onclick = addItem;
+$('iQty').addEventListener('keydown', e=>{ if(e.key==='Enter') addItem(); });
+$('iRate').addEventListener('keydown', e=>{ if(e.key==='Enter') addItem(); });
+
+function addItem(){
+  const name = $('iName').value.trim();
+  const qty = num($('iQty').value);
+  const rate = num($('iRate').value);
+  if(!name){ toast('Choose a product'); $('iName').focus(); return; }
+  if(qty <= 0){ toast('Quantity must be more than 0'); $('iQty').focus(); return; }
+  let p = findProd(name);
+  if(!p){
+    p = { id:'p'+Date.now()+Math.random().toString(36).slice(2,6), name, mar:'', pur:0, sell:rate };
+    P.push(p); P.sort((a,b)=>a.name.localeCompare(b.name)); fillDatalists();
+    toast('New product saved to list');
+  } else if(rate && rate !== num(p.sell)){
+    p.sell = rate;
+  }
+  cart.push({ name:p.name, mar:p.mar||'', qty, rate:rate || num(p.sell), pur:num(p.pur) });
+  save();
+  $('iName').value=''; $('iQty').value='1'; $('iRate').value='';
+  $('iName').focus();
+  renderCart();
+}
+
+function totals(){
+  const sub = cart.reduce((s,i)=> s + i.qty*i.rate, 0);
+  const disc = Math.min(num($('tDisc').value), sub);
+  const profit = cart.reduce((s,i)=> s + i.qty*(i.rate - i.pur), 0) - disc;
+  return { sub, disc, grand: sub - disc, profit, qty: cart.reduce((s,i)=>s+i.qty,0) };
+}
+
+function renderCart(){
+  const box = $('cartList');
+  if(!cart.length){
+    box.innerHTML = '<div class="empty"><b>No items yet</b>Add a product above to start the bill.</div>';
+  } else {
+    box.innerHTML = cart.map((i,ix)=>
+      '<div class="item"><div><div class="nm">'+esc(i.name)+'</div>' +
+      '<div class="sub num">'+i.qty+' × '+money(i.rate)+'</div></div>' +
+      '<div class="amt num">'+money(i.qty*i.rate)+'</div>' +
+      '<button class="btn-x" data-rm="'+ix+'">✕</button></div>').join('');
+    box.querySelectorAll('[data-rm]').forEach(b=> b.onclick = ()=>{
+      cart.splice(+b.dataset.rm,1); renderCart();
+    });
+  }
+  const t = totals();
+  $('tSub').textContent = money(t.sub);
+  $('tGrand').textContent = money(t.grand);
+  $('itemCount').textContent = cart.length + ' items • ' + t.qty + ' qty';
+  $('hMeta').innerHTML = 'Bill #' + (editingBillId ? (B.find(b=>b.id===editingBillId)||{}).no : S.billNo) + '<br>' + dstr(Date.now());
+}
+$('tDisc').oninput = renderCart;
+
+/* language toggle */
+function setLang(l){
+  S.lang = l; save();
+  $('lgMr').classList.toggle('on', l==='mr');
+  $('lgEn').classList.toggle('on', l==='en');
+}
+$('lgMr').onclick = ()=> setLang('mr');
+$('lgEn').onclick = ()=> setLang('en');
+
+/* ---------------- bill message ---------------- */
+function buildMsg(lang, bill){
+  const t = bill ? {
+    sub: bill.sub, disc: bill.disc, grand: bill.grand
+  } : totals();
+  const items = bill ? bill.items : cart;
+  const no = bill ? bill.no : S.billNo;
+  const date = bill ? bill.date : Date.now();
+  const cn = bill ? bill.cName : $('cName').value.trim();
+  const cm = bill ? bill.cMobile : $('cMob').value.replace(/\D/g,'');
+  const L = lang === 'mr' ? {
+    shop: S.shopMr || S.shopMr === '' ? (S.shopMr || S.shop) : S.shop,
+    bill:'बिल क्र.', date:'दिनांक', cust:'ग्राहक', item:'वस्तू',
+    total:'एकूण', disc:'सवलत', pay:'देय रक्कम', thanks:'धन्यवाद! पुन्हा नक्की या.', call:'संपर्क'
+  } : {
+    shop: S.shop,
+    bill:'Bill No.', date:'Date', cust:'Customer', item:'Items',
+    total:'Total', disc:'Discount', pay:'Payable', thanks:'Thank you! Visit again.', call:'Contact'
+  };
+  const line = '------------------------------';
+  let m = '*' + L.shop + '*\n' + L.bill + ' ' + no + '  |  ' + L.date + ': ' + dstr(date) + '\n';
+  if(cn || cm) m += L.cust + ': ' + (cn || '-') + (cm ? ' (' + cm + ')' : '') + '\n';
+  m += line + '\n';
+  items.forEach((i,ix)=>{
+    const nm = (lang === 'mr' && i.mar) ? i.mar : i.name;
+    m += (ix+1) + '. ' + nm + '\n    ' + i.qty + ' × ' + i.rate + ' = ' + (Math.round(i.qty*i.rate*100)/100) + '\n';
+  });
+  m += line + '\n';
+  m += L.total + ': ₹' + (Math.round(t.sub*100)/100) + '\n';
+  if(t.disc > 0) m += L.disc + ': ₹' + (Math.round(t.disc*100)/100) + '\n';
+  m += '*' + L.pay + ': ₹' + (Math.round(t.grand*100)/100) + '*\n\n';
+  m += L.thanks;
+  if(S.phone) m += '\n' + L.call + ': ' + S.phone;
+  return m;
+}
+
+$('bPreview').onclick = ()=>{
+  if(!cart.length){ toast('Bill is empty'); return; }
+  $('sheetBody').textContent = buildMsg(S.lang);
+  $('sheet').classList.add('on');
+};
+$('bCloseSheet').onclick = ()=> $('sheet').classList.remove('on');
+$('sheet').onclick = e=>{ if(e.target.id === 'sheet') $('sheet').classList.remove('on'); };
+$('bCopy').onclick = ()=>{
+  const txt = $('sheetBody').textContent;
+  navigator.clipboard.writeText(txt).then(()=>toast('Copied')).catch(()=>toast('Copy failed — select the text'));
+};
+
+/* ---------------- save + whatsapp ---------------- */
+function saveCustomer(){
+  const name = $('cName').value.trim();
+  const mob = $('cMob').value.replace(/\D/g,'').slice(-10);
+  if(!name && !mob) return null;
+  let c = mob ? C.find(x=>x.mobile === mob) : C.find(x=>x.name.toLowerCase() === name.toLowerCase());
+  if(c){ if(name) c.name = name; if(mob) c.mobile = mob; }
+  else { c = { id:'c'+Date.now(), name: name || mob, mobile: mob, since: Date.now(), bills:0, spent:0 }; C.push(c); }
+  return c;
+}
+
+function saveBill(silent){
+  if(!cart.length){ if(!silent) toast('Add at least one item'); return null; }
+  const t = totals();
+  const cust = saveCustomer();
+  let bill;
+  if(editingBillId){
+    bill = B.find(b=>b.id === editingBillId);
+    Object.assign(bill, {
+      cName: $('cName').value.trim(), cMobile: $('cMob').value.replace(/\D/g,'').slice(-10),
+      items: JSON.parse(JSON.stringify(cart)), sub:t.sub, disc:t.disc, grand:t.grand, profit:t.profit, qty:t.qty
+    });
+    if(!silent) toast('Bill #' + bill.no + ' updated');
+  } else {
+    bill = {
+      id:'b'+Date.now(), no:S.billNo, date:Date.now(),
+      cName: $('cName').value.trim(), cMobile: $('cMob').value.replace(/\D/g,'').slice(-10),
+      items: JSON.parse(JSON.stringify(cart)), sub:t.sub, disc:t.disc, grand:t.grand, profit:t.profit, qty:t.qty
+    };
+    B.unshift(bill);
+    S.billNo = S.billNo + 1;
+    editingBillId = bill.id;
+    if(cust){ cust.bills = (cust.bills||0) + 1; cust.spent = (cust.spent||0) + t.grand; cust.last = Date.now(); }
+    if(!silent) toast('Bill #' + bill.no + ' saved');
+  }
+  save(); fillDatalists(); renderCart();
+  return bill;
+}
+$('bSave').onclick = ()=> saveBill(false);
+
+$('bWA').onclick = ()=>{
+  if(!cart.length){ toast('Bill is empty'); return; }
+  const mob = $('cMob').value.replace(/\D/g,'');
+  if(mob.length < 10){ toast('Enter the 10 digit mobile number'); $('cMob').focus(); return; }
+  const bill = saveBill(true);
+  const msg = buildMsg(S.lang, bill);
+  const wa = mob.length === 10 ? '91' + mob : mob;
+  window.open('https://wa.me/' + wa + '?text=' + encodeURIComponent(msg), '_blank');
+  toast('Bill #' + bill.no + ' saved and opened in WhatsApp');
+};
+
+$('bClear').onclick = ()=>{
+  if(cart.length && !confirm('Start a new bill? Unsaved items will be cleared.')) return;
+  cart = []; editingBillId = null;
+  $('cName').value=''; $('cMob').value=''; $('tDisc').value='0';
+  renderCart(); toast('New bill');
+};
+
+/* ---------------- customers + bills ---------------- */
+function renderCust(){
+  const q = $('cSearch').value.trim().toLowerCase();
+  const list = q ? C.filter(c=> c.name.toLowerCase().includes(q) || (c.mobile||'').includes(q)) : C;
+  $('cCount').textContent = C.length;
+  const box = $('custList');
+  box.innerHTML = list.length ? list.slice().sort((a,b)=>(b.last||0)-(a.last||0)).slice(0,300).map(c=>
+    '<div class="lrow"><div class="main"><b>'+esc(c.name)+'</b><small>'+
+    (c.mobile ? c.mobile + ' • ' : '') + (c.bills||0) + ' bills • ' + money0(c.spent||0) +
+    '</small></div><button class="btn btn-sm" data-bill="'+esc(c.id)+'">New bill</button>' +
+    (c.mobile ? '<button class="btn btn-sm" data-wa="'+esc(c.mobile)+'">Chat</button>' : '') + '</div>'
+  ).join('') : '<div class="empty"><b>No customers yet</b>They get added automatically when you save a bill.</div>';
+
+  box.querySelectorAll('[data-bill]').forEach(b=> b.onclick = ()=>{
+    const c = C.find(x=>x.id === b.dataset.bill);
+    cart = []; editingBillId = null; $('tDisc').value = '0';
+    $('cName').value = c.name; $('cMob').value = c.mobile || '';
+    document.querySelector('nav button[data-v="bill"]').click();
+    renderCart(); $('iName').focus();
+  });
+  box.querySelectorAll('[data-wa]').forEach(b=> b.onclick = ()=>{
+    window.open('https://wa.me/91' + b.dataset.wa, '_blank');
+  });
+
+  $('bCount').textContent = B.length;
+  const bb = $('billList');
+  bb.innerHTML = B.length ? B.slice(0,60).map(b=>
+    '<div class="lrow"><div class="main"><b>#'+b.no+' — '+esc(b.cName || 'Cash')+'</b>' +
+    '<small>'+dstr(b.date)+' • '+b.items.length+' items • '+money(b.grand)+'</small></div>' +
+    '<button class="btn btn-sm" data-open="'+esc(b.id)+'">Open</button>' +
+    (b.cMobile ? '<button class="btn btn-sm" data-re="'+esc(b.id)+'">Resend</button>' : '') + '</div>'
+  ).join('') : '<div class="empty"><b>No bills yet</b>Saved bills appear here.</div>';
+
+  bb.querySelectorAll('[data-open]').forEach(x=> x.onclick = ()=>{
+    const b = B.find(z=>z.id === x.dataset.open);
+    cart = JSON.parse(JSON.stringify(b.items));
+    editingBillId = b.id;
+    $('cName').value = b.cName; $('cMob').value = b.cMobile; $('tDisc').value = b.disc || 0;
+    document.querySelector('nav button[data-v="bill"]').click();
+    renderCart(); toast('Bill #' + b.no + ' opened — edit and save changes');
+  });
+  bb.querySelectorAll('[data-re]').forEach(x=> x.onclick = ()=>{
+    const b = B.find(z=>z.id === x.dataset.re);
+    const wa = b.cMobile.length === 10 ? '91' + b.cMobile : b.cMobile;
+    window.open('https://wa.me/' + wa + '?text=' + encodeURIComponent(buildMsg(S.lang, b)), '_blank');
+  });
+}
+$('cSearch').oninput = renderCust;
+
+/* ---------------- dashboard ---------------- */
+function renderDash(){
+  const today = dkey(Date.now());
+  const now = new Date();
+  const mKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  let tSale=0, tProfit=0, tQty=0, tBills=0, mSale=0, mQty=0;
+  const topMap = {};
+  B.forEach(b=>{
+    const k = dkey(b.date);
+    if(k === today){ tSale += b.grand; tProfit += b.profit || 0; tQty += b.qty || 0; tBills++; }
+    if(k.slice(0,7) === mKey){
+      mSale += b.grand; mQty += b.qty || 0;
+      b.items.forEach(i=>{ topMap[i.name] = (topMap[i.name] || 0) + i.qty; });
+    }
+  });
+  $('dSale').textContent = money0(tSale);
+  $('dProfit').textContent = money0(tProfit);
+  $('dQty').textContent = Math.round(tQty*100)/100;
+  $('dBills').textContent = tBills + (tBills === 1 ? ' bill' : ' bills');
+  $('dMonth').textContent = money0(mSale);
+  $('dMonthQty').textContent = (Math.round(mQty*100)/100) + ' units';
+
+  const days = [];
+  for(let i=6;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const k = dkey(d);
+    const sum = B.filter(b=>dkey(b.date)===k).reduce((s,b)=>s+b.grand,0);
+    days.push({ lbl:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()], v:sum });
+  }
+  const max = Math.max(1, ...days.map(d=>d.v));
+  $('chart').innerHTML = days.map(d=>
+    '<div class="bar"><em>'+(d.v ? Math.round(d.v/1000*10)/10 + 'k' : '')+'</em>' +
+    '<i style="height:'+Math.max(3,(d.v/max)*76)+'%"></i><u>'+d.lbl+'</u></div>').join('');
+
+  const top = Object.entries(topMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  $('topList').innerHTML = top.length ? top.map(([n,q],i)=>
+    '<div class="lrow"><div class="main"><b>'+(i+1)+'. '+esc(n)+'</b></div>' +
+    '<span class="tag">'+(Math.round(q*100)/100)+' qty</span></div>').join('')
+    : '<div class="empty"><b>Nothing sold yet</b>Save a bill and this fills up.</div>';
+
+  $('sShop').value = S.shop; $('sShopMr').value = S.shopMr; $('sPhone').value = S.phone; $('sBillNo').value = S.billNo;
+}
+
+$('bSet').onclick = ()=>{
+  S.shop = $('sShop').value.trim() || 'ANKUSH KIRANA';
+  S.shopMr = $('sShopMr').value.trim() || 'अंकुश किराणा';
+  S.phone = $('sPhone').value.trim();
+  S.billNo = Math.max(1, parseInt($('sBillNo').value) || 1);
+  save(); $('hShop').textContent = S.shop; renderCart(); toast('Settings saved');
+};
+
+/* ---------------- backup ---------------- */
+$('bExport').onclick = ()=>{
+  const blob = new Blob([JSON.stringify({ v:1, at:Date.now(), P, C, B, S }, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ankush-kirana-backup-' + dkey(Date.now()) + '.json';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  toast('Backup file downloaded');
+};
+$('bImport').onclick = ()=> $('fImport').click();
+$('fImport').onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const d = JSON.parse(r.result);
+      if(!d.P && !d.B) throw new Error('bad file');
+      if(!confirm('Restore this backup? Current data on this phone will be replaced.')) return;
+      P = d.P || []; C = d.C || []; B = d.B || []; S = Object.assign(S, d.S || {});
+      save(); fillDatalists(); renderProd(); renderCust(); renderDash();
+      $('hShop').textContent = S.shop; setLang(S.lang || 'mr'); renderCart();
+      toast('Backup restored');
+    }catch(err){ toast('That file is not a valid backup'); }
+    e.target.value = '';
+  };
+  r.readAsText(f);
+};
+
+/* ---------------- boot ---------------- */
+$('hShop').textContent = S.shop;
+setLang(S.lang || 'mr');
+fillDatalists(); renderCart(); renderProd();
+window.addEventListener('beforeunload', save);
+
+/* ---------------- install + offline ---------------- */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  if(!DB.get('ak_install_hidden', false)) $('installBar').style.display = 'block';
+});
+async function doInstall(){
+  if(!deferredPrompt){
+    $('installHelp').style.display = 'block';
+    toast('Use Chrome menu ⋮ → Add to Home screen');
+    return;
+  }
+  deferredPrompt.prompt();
+  const r = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  $('installBar').style.display = 'none';
+  if(r.outcome === 'accepted') toast('Installing BILL…');
+}
+$('bInstall').onclick = doInstall;
+$('bInstall2').onclick = doInstall;
+$('bInstallNo').onclick = ()=>{ DB.set('ak_install_hidden', true); $('installBar').style.display = 'none'; };
+window.addEventListener('appinstalled', ()=>{ $('installBar').style.display = 'none'; toast('BILL installed'); });
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
