@@ -2,13 +2,16 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v1.7  (28-08-2026)
+  Version : v1.8  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v1.8 - Search dropdown shows full names.
+         * Customer dropdown spans the whole row, mobile on its own line
+         * Long product names wrap instead of being cut with "..."
   v1.7 - Bill image goes straight to the customer's chat.
          * Preview shows "Send to <customer>" — copies the image and
            opens that customer's WhatsApp chat, no contact search
@@ -233,9 +236,13 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 .sug .sn{width:23px;height:23px;flex:0 0 auto;border-radius:7px;display:grid;place-items:center;
   font-size:11px;font-weight:700;color:#241800;background:linear-gradient(180deg,#F7E2A6,#D8A63D 60%,#B0821F);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
-.sug .nm{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sug .nm i{font-style:normal;color:var(--brass-lt);background:rgba(216,166,61,.2);border-radius:3px}
-.sug .rt{font-size:12.5px;color:var(--brass);white-space:nowrap}
+.sug .nm{flex:1;min-width:0;font-weight:600;white-space:normal;line-height:1.3;word-break:break-word}
+.sug i{font-style:normal;color:var(--brass-lt);background:rgba(216,166,61,.2);border-radius:3px}
+.sug .nm2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sug .nm2 b{font-weight:600;white-space:normal;line-height:1.3;word-break:break-word}
+.sug .nm2 span{font-size:12.5px;color:var(--brass)}
+#cSug{width:calc(200% + 8px)}
+.sug .rt{font-size:12.5px;color:var(--brass);white-space:nowrap;align-self:flex-start;padding-top:2px}
 .sug .none{padding:13px;color:var(--dim);font-size:13px;text-align:center;line-height:1.5}
 
 /* ---------- pending rate entry ---------- */
@@ -804,7 +811,8 @@ function showCustSug(){
   cIx = -1;
   if(!cList.length){ box.classList.remove('on'); return; }
   box.innerHTML = cList.map((c,i)=>'<div class="r" data-i="'+i+'"><span class="sn">'+(i+1)+'</span>' +
-    '<span class="nm">'+hl(c.name,q)+'</span><span class="rt">'+(c.mobile||'')+'</span></div>').join('');
+    '<span class="nm2"><b>'+hl(c.name,q)+'</b>' +
+    (c.mobile ? '<span>'+esc(c.mobile)+'</span>' : '') + '</span></div>').join('');
   box.classList.add('on');
   box.querySelectorAll('.r').forEach(r=>{
     r.addEventListener('pointerdown', e=>{
