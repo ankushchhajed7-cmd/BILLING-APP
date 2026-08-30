@@ -2,20 +2,25 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v3.0  (28-08-2026)
+  Version : v3.1  (28-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
-  v3.0 - Two dependable ways to load customers, since Chrome's
-         contact picker is unreliable on this phone.
-         * "Contacts file" — import a .vcf exported from the
-           Contacts app, many customers at once
-         * "Bulk add" — paste "Name | Mobile" lines, same idea as
-           the product bulk import
-         * Picker, paste and vCard all share one add routine
+  v3.1 - Purchase / Supplier module (new PURCHASE tab).
+         * Party name + date, then item + qty + purchase rate
+         * Purchase list party-wise, tap View to see the items
+         * Supplier list built from the purchases
+         * Item history: every party, rate and date for one product,
+           cheapest rate marked green
+         * Billing screen shows the latest purchase rate in a
+           blinking chip: rate, party and date
+         * Saving a purchase updates the product's purchase rate,
+           new products are created automatically
+         * Backup file now carries purchases too
+  v3.0 - Two dependable ways to load customers.
   v2.9 - Contact picker made reliable and no longer silent.
          * Dropped the getProperties() await that ran before
            select() and could break the user-gesture chain
@@ -266,11 +271,11 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:600;cursor:poin
 .bar em{font-size:10px;color:var(--brass);font-style:normal}
 
 /* ---------- nav ---------- */
-nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);
   background:linear-gradient(180deg,#0B2A24,#061916);border-top:1px solid var(--line);
   padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(0,0,0,.45)}
 nav button{background:none;border:0;color:var(--dim);display:flex;flex-direction:column;align-items:center;
-  gap:3px;padding:5px 2px;font-size:10.5px;letter-spacing:.6px;font-weight:600;text-transform:uppercase}
+  gap:3px;padding:5px 1px;font-size:9.5px;letter-spacing:.2px;font-weight:600;text-transform:uppercase}
 nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--brass)}
 nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
@@ -306,6 +311,23 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 .lrow.pend .main b{white-space:normal;font-size:14px;line-height:1.25}
 .btn-ico{padding:8px 9px;font-size:14px;border-radius:9px;line-height:1}
 .btn-later{background:#12332C;border:1px solid var(--line);color:var(--brass)}
+
+/* ---------- purchase chip ---------- */
+@keyframes blinkchip{
+  0%,100%{background:rgba(216,166,61,.20);color:var(--brass-lt);border-color:rgba(216,166,61,.5)}
+  50%{background:rgba(226,112,90,.30);color:#FFD9CF;border-color:rgba(226,112,90,.65)}
+}
+.purchip{margin-top:8px;padding:9px 11px;border-radius:10px;font-size:13px;font-weight:600;
+  border:1px solid var(--line);animation:blinkchip 1.25s ease-in-out infinite;text-align:center}
+.pubox{padding:2px 0 10px 8px;border-left:2px solid var(--line);margin:0 0 8px 6px}
+.pubox .pr{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:5px 0;color:var(--dim)}
+.pubox .pr b{color:var(--text);font-weight:600;flex:1;min-width:0}
+.hrow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(216,166,61,.12)}
+.hrow:last-child{border-bottom:0}
+.hrow .hr{font-family:var(--f-disp);font-size:19px;color:var(--brass-lt);min-width:78px}
+.hrow .hp{flex:1;min-width:0;font-size:13.5px;font-weight:600}
+.hrow .hd{font-size:12px;color:var(--dim);white-space:nowrap}
+.hrow.low .hr{color:#7BE0A2}
 
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
@@ -380,7 +402,8 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
       <input id="iName" placeholder="Type first letter" autocomplete="off">
       <div class="sug" id="iSug"></div>
     </div>
-    <div class="g3">
+    <div id="purChip" class="purchip" style="display:none"></div>
+    <div class="g3" style="margin-top:8px">
       <div>
         <label for="iQty">Qty</label>
         <input id="iQty" type="number" inputmode="decimal" step="0.01" min="0" value="1" class="num">
@@ -541,6 +564,77 @@ Golu Patil 8459937759"></textarea>
   </div>
 </section>
 
+<!-- ============ PURCHASE ============ -->
+<section id="v-pur" class="view">
+  <div class="card">
+    <div class="ttl">New purchase</div>
+    <div class="g2">
+      <div class="sugwrap">
+        <label for="pyName">Party name</label>
+        <input id="pyName" placeholder="Supplier ka naam" autocomplete="off">
+        <div class="sug" id="pySug"></div>
+      </div>
+      <div>
+        <label for="pyDate">Date</label>
+        <input id="pyDate" type="date">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Add item <span class="hint" id="puPCount">0 products</span></div>
+    <div class="sugwrap" style="margin-bottom:8px">
+      <label for="puName">Product</label>
+      <input id="puName" placeholder="Type first letter" autocomplete="off">
+      <div class="sug" id="puSug"></div>
+    </div>
+    <div class="g3">
+      <div>
+        <label for="puQty">Qty</label>
+        <input id="puQty" type="number" inputmode="decimal" step="0.01" min="0" value="1" class="num">
+      </div>
+      <div>
+        <label for="puRate">Purchase rate</label>
+        <input id="puRate" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" class="num">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn-gold full" id="bPuAdd">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Purchase bill <span class="hint" id="puItems">0 items</span></div>
+    <div id="puCartList"></div>
+    <div class="grand" style="margin-top:10px"><span>Total</span><strong class="num" id="puTotal">&#8377;0.00</strong></div>
+    <div class="g2" style="margin-top:10px">
+      <button class="btn-gold" id="bPuSave">Save purchase</button>
+      <button class="btn" id="bPuClear">Clear</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Item history <span class="hint">party wise rate</span></div>
+    <div class="sugwrap" style="margin-bottom:10px">
+      <input id="hName" placeholder="Product ka naam type karo" autocomplete="off">
+      <div class="sug" id="hSug"></div>
+    </div>
+    <div id="histList"><div class="empty"><b>Koi item chuno</b>Us item ki saari party, rate aur date dikhengi.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Purchase list <span class="hint" id="puCount2">0</span></div>
+    <input id="puSearch" placeholder="Search party" autocomplete="off" style="margin-bottom:10px">
+    <div id="purList"></div>
+  </div>
+
+  <div class="card">
+    <div class="ttl">Suppliers <span class="hint" id="supCount">0</span></div>
+    <div id="supList"></div>
+  </div>
+</section>
+
 <!-- ============ DASHBOARD ============ -->
 <section id="v-dash" class="view">
   <div class="tiles">
@@ -604,6 +698,7 @@ Golu Patil 8459937759"></textarea>
   <button data-v="bill" class="on"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>Billing</button>
   <button data-v="prod"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Products</button>
   <button data-v="cust"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>Customers</button>
+  <button data-v="pur"><svg viewBox="0 0 24 24"><path d="M3 6h15l-1.5 9h-12z"/><circle cx="8" cy="20" r="1.3"/><circle cx="16" cy="20" r="1.3"/><path d="M3 6L2.4 3H1"/></svg>Purchase</button>
   <button data-v="dash"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Dashboard</button>
 </nav>
 
@@ -635,6 +730,7 @@ const DB = {
 let P = DB.get('ak_products', []);
 let C = DB.get('ak_customers', []);
 let B = DB.get('ak_bills', []);
+let PU = DB.get('ak_purchases', []);
 let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
 let cart = [];
 let editingBillId = null;
@@ -650,7 +746,7 @@ const dkey = d => { const x = new Date(d); return x.getFullYear()+'-'+String(x.g
 let toastT;
 function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2200); }
 
-function save(){ DB.set('ak_products',P); DB.set('ak_customers',C); DB.set('ak_bills',B); DB.set('ak_settings',S); }
+function save(){ DB.set('ak_products',P); DB.set('ak_customers',C); DB.set('ak_bills',B); DB.set('ak_purchases',PU); DB.set('ak_settings',S); }
 
 /* ---------------- navigation ---------------- */
 document.querySelectorAll('nav button').forEach(b=>{
@@ -662,6 +758,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.v==='dash') renderDash();
     if(b.dataset.v==='cust') renderCust();
     if(b.dataset.v==='prod') renderProd();
+    if(b.dataset.v==='pur') renderPu();
   };
 });
 
@@ -857,6 +954,7 @@ function pickProd(p){
   if(!p) return;
   $('iName').value = p.name;
   if(p.sell) $('iRate').value = p.sell;
+  showPurChip(p);
   $('iSug').classList.remove('on');
   $('iQty').focus(); $('iQty').select();
 }
@@ -869,7 +967,7 @@ function moveSug(box, list, ix, dir){
   rows[ix].scrollIntoView({block:'nearest'});
   return ix;
 }
-$('iName').addEventListener('input', showProdSug);
+$('iName').addEventListener('input', ()=>{ showProdSug(); showPurChip(findProd($('iName').value)); });
 $('iName').addEventListener('focus', showProdSug);
 $('iName').addEventListener('keydown', e=>{
   if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
@@ -956,6 +1054,7 @@ function addItem(){
   cart.push({ name:p.name, mar:p.mar||'', qty, rate:rate || num(p.sell), pur:num(p.pur) });
   save();
   $('iName').value=''; $('iQty').value='1'; $('iRate').value='';
+  showPurChip(null);
   $('iName').focus();
   renderCart();
 }
@@ -1509,6 +1608,233 @@ $('bCAdd').onclick = ()=>{
 };
 $('ncMob').addEventListener('keydown', e=>{ if(e.key === 'Enter') $('bCAdd').click(); });
 
+/* ---------------- purchase / suppliers ---------------- */
+let puCart = [];
+
+function isoToday(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function purchasesOf(name){
+  const n = String(name).toLowerCase();
+  const out = [];
+  PU.forEach(u=> u.items.forEach(i=>{
+    if(i.name.toLowerCase() === n) out.push({ rate:num(i.rate), qty:num(i.qty), party:u.party, date:u.date });
+  }));
+  return out.sort((a,b)=> b.date - a.date);
+}
+function lastPurchase(name){
+  const h = purchasesOf(name);
+  return h.length ? h[0] : null;
+}
+function suppliers(){
+  const m = {};
+  PU.forEach(u=>{
+    const k = u.party.trim();
+    if(!m[k]) m[k] = { party:k, bills:0, total:0, last:0 };
+    m[k].bills++; m[k].total += num(u.total); m[k].last = Math.max(m[k].last, u.date);
+  });
+  return Object.values(m).sort((a,b)=> b.last - a.last);
+}
+
+/* generic product dropdown, reused by purchase + history */
+function wireProdSug(inId, sugId, onPick, rateOf){
+  const inp = $(inId), box = $(sugId);
+  let list = [], ix = -1;
+  function show(){
+    const q = inp.value.trim().toLowerCase();
+    if(!q){ box.classList.remove('on'); list = []; return; }
+    const st = [], hs = [];
+    P.forEach(p=>{
+      const n = p.name.toLowerCase();
+      if(n.startsWith(q)) st.push(p);
+      else if(n.includes(q) || (p.mar||'').includes(q)) hs.push(p);
+    });
+    list = st.concat(hs).slice(0,50); ix = -1;
+    box.innerHTML = list.length
+      ? list.map((p,i)=>'<div class="r" data-i="'+i+'"><span class="sn">'+(i+1)+'</span>' +
+          '<span class="nm">'+hl(p.name,q)+'</span>' +
+          '<span class="rt">'+rateOf(p)+'</span></div>').join('')
+      : '<div class="none">No match — Add karne par naya product ban jayega.</div>';
+    box.classList.add('on');
+    box.querySelectorAll('.r').forEach(r=>{
+      r.onclick = ()=>{ onPick(list[+r.dataset.i]); box.classList.remove('on'); };
+    });
+  }
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault(); ix = moveSug(box, list, ix, e.key === 'ArrowDown' ? 1 : -1);
+    } else if(e.key === 'Enter' && list.length){
+      e.preventDefault(); onPick(list[ix < 0 ? 0 : ix]); box.classList.remove('on');
+    } else if(e.key === 'Escape'){ box.classList.remove('on'); }
+  });
+}
+
+wireProdSug('puName','puSug', p=>{
+  $('puName').value = p.name;
+  const h = lastPurchase(p.name);
+  $('puRate').value = h ? h.rate : (num(p.pur) || '');
+  $('puQty').focus(); $('puQty').select();
+}, p=>{ const h = lastPurchase(p.name); return h ? money(h.rate) : (num(p.pur) ? money(p.pur) : '—'); });
+
+wireProdSug('hName','hSug', p=>{ $('hName').value = p.name; renderHist(p.name); },
+  p=>{ const h = lastPurchase(p.name); return h ? money(h.rate) : '—'; });
+
+/* party name dropdown */
+(function(){
+  const inp = $('pyName'), box = $('pySug');
+  function show(){
+    const q = inp.value.trim().toLowerCase();
+    const all = suppliers().map(x=>x.party);
+    const list = (q ? all.filter(n=>n.toLowerCase().includes(q)) : all).slice(0,30);
+    if(!list.length){ box.classList.remove('on'); return; }
+    box.innerHTML = list.map((n,i)=>'<div class="r" data-n="'+esc(n)+'"><span class="sn">'+(i+1)+'</span>' +
+      '<span class="nm">'+esc(n)+'</span></div>').join('');
+    box.classList.add('on');
+    box.querySelectorAll('.r').forEach(r=>{
+      r.onclick = ()=>{ inp.value = r.dataset.n; box.classList.remove('on'); $('puName').focus(); };
+    });
+  }
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+})();
+
+$('bPuAdd').onclick = ()=>{
+  const name = $('puName').value.trim();
+  const qty = num($('puQty').value);
+  const rate = num($('puRate').value);
+  if(!name){ toast('Product chuno'); $('puName').focus(); return; }
+  if(qty <= 0){ toast('Qty 0 se zyada honi chahiye'); $('puQty').focus(); return; }
+  if(rate <= 0){ toast('Purchase rate daalo'); $('puRate').focus(); return; }
+  puCart.push({ name, qty, rate });
+  $('puName').value = ''; $('puQty').value = '1'; $('puRate').value = '';
+  $('puName').focus();
+  renderPu();
+};
+
+$('bPuClear').onclick = ()=>{
+  if(puCart.length && !confirm('Purchase bill clear karein?')) return;
+  puCart = []; renderPu();
+};
+
+$('bPuSave').onclick = ()=>{
+  const party = $('pyName').value.trim();
+  if(!party){ toast('Party ka naam daalo'); $('pyName').focus(); return; }
+  if(!puCart.length){ toast('Kam se kam ek item daalo'); return; }
+  const dv = $('pyDate').value || isoToday();
+  const date = new Date(dv + 'T12:00:00').getTime();
+  const total = puCart.reduce((s,i)=> s + i.qty*i.rate, 0);
+  PU.unshift({ id:'u'+Date.now(), party, date, items: JSON.parse(JSON.stringify(puCart)), total });
+
+  puCart.forEach(i=>{
+    let p = findProd(i.name);
+    if(!p){
+      p = { id:'p'+Date.now()+Math.random().toString(36).slice(2,6), name:i.name, mar:'', pur:i.rate, sell:0 };
+      P.push(p);
+    } else { p.pur = i.rate; }
+  });
+  P.sort((a,b)=>a.name.localeCompare(b.name));
+  puCart = [];
+  save(); renderPu(); renderProd(); fillDatalists();
+  toast(party + ' — purchase saved');
+};
+
+function renderHist(name){
+  const box = $('histList');
+  if(!name){ box.innerHTML = '<div class="empty"><b>Koi item chuno</b>Us item ki saari party, rate aur date dikhengi.</div>'; return; }
+  const h = purchasesOf(name);
+  if(!h.length){
+    box.innerHTML = '<div class="empty"><b>' + esc(name) + '</b>Is item ki koi purchase entry nahi hai.</div>';
+    return;
+  }
+  const low = Math.min(...h.map(x=>x.rate));
+  box.innerHTML = h.map(x=>
+    '<div class="hrow' + (x.rate === low ? ' low' : '') + '">' +
+    '<span class="hr num">' + money(x.rate) + '</span>' +
+    '<span class="hp">' + esc(x.party) + '</span>' +
+    '<span class="hd">' + dstr(x.date) + ' &middot; ' + (Math.round(x.qty*100)/100) + '</span></div>').join('');
+}
+$('hName').addEventListener('input', ()=>{
+  const p = findProd($('hName').value);
+  if(p) renderHist(p.name); else renderHist('');
+});
+
+function renderPu(){
+  $('puPCount').textContent = P.length + ' products';
+
+  const box = $('puCartList');
+  if(!puCart.length){
+    box.innerHTML = '<div class="empty"><b>Koi item nahi</b>Upar se item, qty aur purchase rate daalo.</div>';
+  } else {
+    box.innerHTML = puCart.map((i,ix)=>
+      '<div class="item"><div><div class="nm">'+esc(i.name)+'</div>' +
+      '<div class="sub num">'+(Math.round(i.qty*100)/100)+' &times; '+money(i.rate)+'</div></div>' +
+      '<div class="amt num">'+money(i.qty*i.rate)+'</div>' +
+      '<button class="btn-x" data-purm="'+ix+'">&#10005;</button></div>').join('');
+    box.querySelectorAll('[data-purm]').forEach(b=> b.onclick = ()=>{
+      puCart.splice(+b.dataset.purm,1); renderPu();
+    });
+  }
+  $('puItems').textContent = puCart.length + ' items';
+  $('puTotal').textContent = money(puCart.reduce((s,i)=> s + i.qty*i.rate, 0));
+
+  const q = $('puSearch').value.trim().toLowerCase();
+  const list = q ? PU.filter(u=> u.party.toLowerCase().includes(q)) : PU;
+  $('puCount2').textContent = list.length;
+  const pl = $('purList');
+  pl.innerHTML = list.length ? list.slice(0,120).map(u=>
+    '<div class="lrow"><div class="main"><b>'+esc(u.party)+'</b><small>'+
+    dstr(u.date)+' &middot; '+u.items.length+' items &middot; '+money(u.total)+'</small></div>' +
+    '<button class="btn btn-sm" data-pview="'+esc(u.id)+'">View</button>' +
+    '<button class="btn-x btn-ico" data-pdel="'+esc(u.id)+'">&#10005;</button></div>' +
+    '<div class="pubox" id="pb-'+esc(u.id)+'" style="display:none">' +
+    u.items.map(i=>'<div class="pr"><b>'+esc(i.name)+'</b><span>'+(Math.round(i.qty*100)/100)+' &times; '+
+      money(i.rate)+' = '+money(i.qty*i.rate)+'</span></div>').join('') + '</div>'
+  ).join('') : '<div class="empty"><b>Koi purchase nahi</b>Upar party aur item daal ke Save purchase dabao.</div>';
+
+  pl.querySelectorAll('[data-pview]').forEach(b=> b.onclick = ()=>{
+    const d = document.getElementById('pb-' + b.dataset.pview);
+    const open = d.style.display === 'block';
+    d.style.display = open ? 'none' : 'block';
+    b.textContent = open ? 'View' : 'Hide';
+  });
+  pl.querySelectorAll('[data-pdel]').forEach(b=> b.onclick = ()=>{
+    const u = PU.find(x=>x.id === b.dataset.pdel);
+    if(u && confirm(u.party + ' ka ' + dstr(u.date) + ' wala purchase delete karein?')){
+      PU = PU.filter(x=>x.id !== b.dataset.pdel); save(); renderPu(); toast('Purchase deleted');
+    }
+  });
+
+  const sup = suppliers();
+  $('supCount').textContent = sup.length;
+  $('supList').innerHTML = sup.length ? sup.map(x=>
+    '<div class="lrow"><div class="main"><b>'+esc(x.party)+'</b><small>'+
+    x.bills+' purchase &middot; '+money0(x.total)+' &middot; last '+dstr(x.last)+'</small></div>' +
+    '<button class="btn btn-sm" data-sfil="'+esc(x.party)+'">Show</button></div>').join('')
+    : '<div class="empty"><b>Koi supplier nahi</b>Purchase save karte hi party yahan aa jayegi.</div>';
+  $('supList').querySelectorAll('[data-sfil]').forEach(b=> b.onclick = ()=>{
+    $('puSearch').value = b.dataset.sfil; renderPu();
+    $('puSearch').scrollIntoView({behavior:'smooth', block:'center'});
+  });
+}
+$('puSearch').oninput = renderPu;
+
+/* purchase rate chip on the billing screen */
+function showPurChip(p){
+  const c = $('purChip');
+  if(!p){ c.style.display = 'none'; return; }
+  const h = lastPurchase(p.name);
+  if(h){
+    c.innerHTML = 'खरेदी ' + money(h.rate) + '  &middot;  ' + esc(h.party) + '  &middot;  ' + dstr(h.date);
+    c.style.display = 'block';
+  } else if(num(p.pur) > 0){
+    c.innerHTML = 'खरेदी ' + money(p.pur);
+    c.style.display = 'block';
+  } else { c.style.display = 'none'; }
+}
+
 /* ---------------- dashboard ---------------- */
 function renderDash(){
   const today = dkey(Date.now());
@@ -1562,7 +1888,7 @@ $('bSet').onclick = ()=>{
 
 /* ---------------- backup ---------------- */
 $('bExport').onclick = ()=>{
-  const blob = new Blob([JSON.stringify({ v:1, at:Date.now(), P, C, B, S }, null, 1)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify({ v:2, at:Date.now(), P, C, B, PU, S }, null, 1)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'ankush-kirana-backup-' + dkey(Date.now()) + '.json';
@@ -1578,8 +1904,8 @@ $('fImport').onchange = e=>{
       const d = JSON.parse(r.result);
       if(!d.P && !d.B) throw new Error('bad file');
       if(!confirm('Restore this backup? Current data on this phone will be replaced.')) return;
-      P = d.P || []; C = d.C || []; B = d.B || []; S = Object.assign(S, d.S || {});
-      save(); fillDatalists(); renderProd(); renderCust(); renderDash();
+      P = d.P || []; C = d.C || []; B = d.B || []; PU = d.PU || []; S = Object.assign(S, d.S || {});
+      save(); fillDatalists(); renderProd(); renderCust(); renderPu(); renderDash();
       $('hShop').textContent = S.shop; setLang(S.lang || 'mr'); renderCart();
       toast('Backup restored');
     }catch(err){ toast('That file is not a valid backup'); }
@@ -1591,7 +1917,8 @@ $('fImport').onchange = e=>{
 /* ---------------- boot ---------------- */
 $('hShop').textContent = S.shop;
 setLang(S.lang || 'mr');
-fillDatalists(); renderCart(); renderProd();
+$('pyDate').value = isoToday();
+fillDatalists(); renderCart(); renderProd(); renderPu();
 window.addEventListener('beforeunload', save);
 
 /* ---------------- install + offline ---------------- */
