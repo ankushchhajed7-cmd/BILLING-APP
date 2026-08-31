@@ -2,13 +2,23 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v3.2  (31-08-2026)
+  Version : v4.0  (31-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v4.0 - Poster Maker merged in (new POSTER tab).
+         * भाव यादी — pick products from the same master, sell rate
+           fills itself, two unit columns, blank cell if rate empty
+         * ऑफर — product, MRP struck through, big offer price,
+           optional product photo, validity line
+         * सामान्य — title plus up to 7 lines
+         * 6 themes: Classic Red, Green Fresh, Haldi Bright,
+           Royal Blue, Black Gold, Rani Pink
+         * 1080x1350 output, Share or Save, same as the bill image
+         * Shop name / gaon / number come from Shop settings
   v3.2 - Fixed "copy bill to" number for the salesman.
          * Entered once above Customer name, stays saved until changed
          * Green "Copy to <number>" button on the billing screen sends
@@ -275,12 +285,12 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:600;cursor:poin
 .bar em{font-size:10px;color:var(--brass);font-style:normal}
 
 /* ---------- nav ---------- */
-nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(6,1fr);
   background:linear-gradient(180deg,#0B2A24,#061916);border-top:1px solid var(--line);
   padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(0,0,0,.45)}
 nav button{background:none;border:0;color:var(--dim);display:flex;flex-direction:column;align-items:center;
-  gap:3px;padding:5px 1px;font-size:9.5px;letter-spacing:.2px;font-weight:600;text-transform:uppercase}
-nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  gap:3px;padding:5px 0;font-size:8.4px;letter-spacing:0;font-weight:600;text-transform:uppercase}
+nav button svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--brass)}
 nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 
@@ -644,6 +654,86 @@ Golu Patil 8459937759"></textarea>
   </div>
 </section>
 
+<!-- ============ POSTER ============ -->
+<section id="v-post" class="view">
+  <div class="card">
+    <div class="ttl">Poster</div>
+    <div class="seg three" style="margin-bottom:10px">
+      <button id="pmRate" class="on">भाव यादी</button>
+      <button id="pmOffer">ऑफर</button>
+      <button id="pmPlain">सामान्य</button>
+    </div>
+    <label for="poTheme">Theme</label>
+    <select id="poTheme">
+      <option value="red">Classic Red</option>
+      <option value="green">Green Fresh</option>
+      <option value="haldi">Haldi Bright</option>
+      <option value="blue">Royal Blue</option>
+      <option value="black">Black Gold</option>
+      <option value="pink">Rani Pink</option>
+    </select>
+  </div>
+
+  <div class="card" id="poRateBox">
+    <div class="ttl">Rate list <span class="hint" id="poCount">0 items</span></div>
+    <div style="margin-bottom:8px">
+      <label for="poTitle">Title</label>
+      <input id="poTitle" value="आजचे भाव">
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <div><label for="poU1">Unit 1</label><input id="poU1" value="1 KG"></div>
+      <div><label for="poU2">Unit 2</label><input id="poU2" value="500 GM"></div>
+    </div>
+    <div class="sugwrap" style="margin-bottom:10px">
+      <label for="poName">Product add karo</label>
+      <input id="poName" placeholder="Type first letter" autocomplete="off">
+      <div class="sug" id="poSug"></div>
+    </div>
+    <div id="poRows"></div>
+  </div>
+
+  <div class="card" id="poOfferBox" style="display:none">
+    <div class="ttl">Offer poster</div>
+    <div class="sugwrap" style="margin-bottom:8px">
+      <label for="poIName">Product</label>
+      <input id="poIName" placeholder="Type first letter" autocomplete="off">
+      <div class="sug" id="poISug"></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label for="poSub">Marathi naam / tagline</label>
+      <input id="poSub" placeholder="उदा. सोयाबीन तेल">
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <div><label for="poMrp">MRP</label><input id="poMrp" type="number" inputmode="decimal" class="num" placeholder="0"></div>
+      <div><label for="poPrice">Offer price</label><input id="poPrice" type="number" inputmode="decimal" class="num" placeholder="0"></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label for="poValid">Validity line</label>
+      <input id="poValid" value="फक्त आजसाठी">
+    </div>
+    <label>Product photo (optional)</label>
+    <input type="file" id="poPhoto" accept="image/*">
+  </div>
+
+  <div class="card" id="poPlainBox" style="display:none">
+    <div class="ttl">Simple poster</div>
+    <div style="margin-bottom:8px">
+      <label for="poPTitle">Title</label>
+      <input id="poPTitle" placeholder="उदा. रविवारी दुकान बंद">
+    </div>
+    <label for="poLines">Lines (ek line mein ek)</label>
+    <textarea id="poLines" placeholder="नवीन माल आला आहे&#10;सर्व वस्तूंवर सूट&#10;आजच या"></textarea>
+  </div>
+
+  <div class="card">
+    <button class="btn-gold full" id="bPoMake">Poster banao</button>
+    <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0">
+      Shop ka naam, gaon aur number Dashboard &rarr; Shop settings se aate hain.
+      Poster 1080&times;1350 ka banega — WhatsApp Status aur Channel dono ke liye sahi.
+    </p>
+  </div>
+</section>
+
 <!-- ============ DASHBOARD ============ -->
 <section id="v-dash" class="view">
   <div class="tiles">
@@ -683,6 +773,10 @@ Golu Patil 8459937759"></textarea>
         <input id="sBillNo" type="number" min="1" class="num">
       </div>
     </div>
+    <div style="margin-bottom:10px">
+      <label for="sVillage">Gaon / area <span style="text-transform:none;letter-spacing:0">— poster par dikhega</span></label>
+      <input id="sVillage" placeholder="उदा. ताहाराबाद">
+    </div>
     <button class="btn-gold full" id="bSet" style="margin-bottom:8px">Save changes</button>
     <div class="g2">
       <button class="btn" id="bExport">Backup file</button>
@@ -708,6 +802,7 @@ Golu Patil 8459937759"></textarea>
   <button data-v="prod"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Products</button>
   <button data-v="cust"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>Customers</button>
   <button data-v="pur"><svg viewBox="0 0 24 24"><path d="M3 6h15l-1.5 9h-12z"/><circle cx="8" cy="20" r="1.3"/><circle cx="16" cy="20" r="1.3"/><path d="M3 6L2.4 3H1"/></svg>Purchase</button>
+  <button data-v="post"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Poster</button>
   <button data-v="dash"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Dashboard</button>
 </nav>
 
@@ -740,7 +835,7 @@ let P = DB.get('ak_products', []);
 let C = DB.get('ak_customers', []);
 let B = DB.get('ak_bills', []);
 let PU = DB.get('ak_purchases', []);
-let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
+let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
 let cart = [];
 let editingBillId = null;
 
@@ -768,6 +863,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.v==='cust') renderCust();
     if(b.dataset.v==='prod') renderProd();
     if(b.dataset.v==='pur') renderPu();
+    if(b.dataset.v==='post') renderPoRows();
   };
 });
 
@@ -1364,7 +1460,7 @@ $('bWA').onclick = async ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
   const bill = saveBill(true);
   const mob = (bill.cMobile || '').replace(/\D/g,'');
-  lastNo = bill.no;
+  lastNo = bill.no; lastName = 'bill';
   toast('Making the bill image…');
   const canvas = await drawBill(bill, S.lang);
   const mk = (t,q)=> new Promise(r=> canvas.toBlob(r, t, q));
@@ -1406,7 +1502,7 @@ function saveImage(){
   if(!lastJpg) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(lastJpg);
-  a.download = 'bill-' + lastNo + '.jpg';
+  a.download = lastName + '-' + (lastName === 'poster' ? dstr(Date.now()).replace(/\//g,'-') : lastNo) + '.jpg';
   document.body.appendChild(a); a.click(); a.remove();
   toast('Saved to your phone — attach it from Gallery in WhatsApp');
 }
@@ -1414,7 +1510,7 @@ $('bSaveImg').onclick = saveImage;
 
 async function shareImage(){
   if(!lastBlob) return;
-  const file = new File([lastBlob], 'bill-' + lastNo + '.png', { type:'image/png' });
+  const file = new File([lastBlob], lastName + '.png', { type:'image/png' });
   if(navigator.canShare && navigator.canShare({ files:[file] })){
     try{
       await navigator.share({ files:[file] });
@@ -1865,6 +1961,234 @@ function showPurChip(p){
   } else { c.style.display = 'none'; }
 }
 
+/* ---------------- poster ---------------- */
+const THEMES = {
+  red:   { a:'#8E1A16', b:'#3A0807', hdr:'#6B110E', acc:'#D8A63D', ttl:'#FFE9B8', sub:'#F3C98B',
+           panel:'#FFFBF2', zebra:'#F6E9D2', nm:'#2A1A0A', rt:'#8E1A16', accTxt:'#3A0807' },
+  green: { a:'#14684A', b:'#052018', hdr:'#0E4E37', acc:'#F2C94C', ttl:'#FFF6D6', sub:'#A9DCC2',
+           panel:'#FBFFFA', zebra:'#E4F3E9', nm:'#0F2A20', rt:'#14684A', accTxt:'#052018' },
+  haldi: { a:'#F0AE1C', b:'#8A5B00', hdr:'#C98A0B', acc:'#3A2400', ttl:'#3A2400', sub:'#5A3B00',
+           panel:'#FFFDF4', zebra:'#FBEFCF', nm:'#3A2400', rt:'#B4600B', accTxt:'#FFF3D0' },
+  blue:  { a:'#1B4A93', b:'#061530', hdr:'#123769', acc:'#F5C542', ttl:'#EAF2FF', sub:'#A9C4EC',
+           panel:'#FBFDFF', zebra:'#E3ECFA', nm:'#12233D', rt:'#1B4A93', accTxt:'#061530' },
+  black: { a:'#2A2A2A', b:'#000000', hdr:'#1A1A1A', acc:'#D8A63D', ttl:'#F7E2A6', sub:'#B9A26E',
+           panel:'#FCFAF5', zebra:'#EFE7D6', nm:'#1F1B12', rt:'#8A6416', accTxt:'#000000' },
+  pink:  { a:'#C2185B', b:'#440621', hdr:'#96124A', acc:'#FFD1E3', ttl:'#FFEAF2', sub:'#F1AFC9',
+           panel:'#FFFAFC', zebra:'#FCE4EE', nm:'#3A0A20', rt:'#C2185B', accTxt:'#440621' }
+};
+let poList = [], poMode = 'rate', poImg = null;
+let lastName = 'bill';
+
+function rr(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+function shopLine(){
+  const bits = [];
+  if(S.village) bits.push(S.village);
+  if(S.phone) bits.push(S.phone);
+  return bits.join('  •  ');
+}
+
+async function drawPoster(){
+  try{ await document.fonts.ready; }catch(e){}
+  const t = THEMES[$('poTheme').value] || THEMES.red;
+  const W = 1080;
+  const rows = poList;
+  let H = 1350;
+  if(poMode === 'rate') H = Math.max(1350, 425 + 70 + 80*rows.length + 20 + 180);
+
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const F = (w,s,fam)=> g.font = w + ' ' + s + 'px ' + (fam || '"Mukta","Noto Sans Devanagari",sans-serif');
+  const D = (w,s)=> g.font = w + ' ' + s + 'px "Khand","Mukta","Noto Sans Devanagari",sans-serif';
+
+  const lg = g.createLinearGradient(0,0,0,H);
+  lg.addColorStop(0, t.a); lg.addColorStop(1, t.b);
+  g.fillStyle = lg; g.fillRect(0,0,W,H);
+  g.textAlign = 'center';
+
+  const shop = S.shopMr || S.shop;
+
+  if(poMode === 'rate'){
+    g.fillStyle = t.hdr; g.fillRect(0,0,W,250);
+    D('700', 78); g.fillStyle = t.ttl; g.fillText(shop, W/2, 112);
+    F('500', 34); g.fillStyle = t.sub; g.fillText('KIRANA & GENERAL STORE', W/2, 165);
+    F('500', 30); g.fillText(shopLine(), W/2, 213);
+
+    g.fillStyle = t.acc; rr(g,90,285,W-180,100,50); g.fill();
+    D('700', 62); g.fillStyle = t.accTxt;
+    g.fillText($('poTitle').value.trim() || 'आजचे भाव', W/2, 355);
+
+    const top = 425, rh = 80;
+    const bottom = top + 70 + rh*rows.length + 20;
+    g.fillStyle = t.panel; rr(g,70,top,W-140,bottom-top,34); g.fill();
+
+    F('700', 36); g.fillStyle = t.rt;
+    g.textAlign = 'left';  g.fillText('वस्तू', 110, top+48);
+    g.textAlign = 'center';
+    g.fillText($('poU1').value.trim() || '1 KG', 790, top+48);
+    g.fillText($('poU2').value.trim() || '500 GM', 940, top+48);
+    g.strokeStyle = t.acc; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(100, top+66); g.lineTo(W-100, top+66); g.stroke();
+
+    let y = top + 70;
+    rows.forEach((r,i)=>{
+      if(i % 2 === 0){ g.fillStyle = t.zebra; rr(g,90,y+6,W-180,rh-12,14); g.fill(); }
+      g.textAlign = 'left'; g.fillStyle = t.nm;
+      let size = 40; F('500', size);
+      while(g.measureText(r.name).width > 620 && size > 22){ size -= 1; F('500', size); }
+      g.fillText(r.name, 110, y + rh/2 + 14);
+      F('700', 44); g.fillStyle = t.rt; g.textAlign = 'center';
+      if(r.r1) g.fillText(r.r1, 790, y + rh/2 + 15);
+      if(r.r2) g.fillText(r.r2, 940, y + rh/2 + 15);
+      y += rh;
+    });
+
+    F('700', 44); g.fillStyle = t.ttl;
+    g.fillText('RATE ONLY FOR TODAY', W/2, bottom + 72);
+    F('500', 32); g.fillStyle = t.sub;
+    g.fillText(dstr(Date.now()) + '  •  स्टॉक असेपर्यंत', W/2, bottom + 132);
+
+  } else if(poMode === 'offer'){
+    g.strokeStyle = t.acc; g.lineWidth = 6; rr(g,44,44,W-88,H-88,44); g.stroke();
+    D('700', 66); g.fillStyle = t.ttl; g.fillText(shop, W/2, 190);
+    F('500', 30); g.fillStyle = t.sub; g.fillText('KIRANA & GENERAL STORE', W/2, 240);
+
+    g.fillStyle = t.acc; rr(g,300,300,W-600,80,40); g.fill();
+    D('700', 46); g.fillStyle = t.accTxt; g.fillText('आजची ऑफर', W/2, 356);
+
+    g.save();
+    g.beginPath(); g.arc(W/2, 580, 150, 0, Math.PI*2); g.closePath();
+    g.fillStyle = t.hdr; g.fill();
+    if(poImg){ g.clip(); g.drawImage(poImg, W/2-150, 430, 300, 300); }
+    g.restore();
+    g.strokeStyle = t.acc; g.lineWidth = 5;
+    g.beginPath(); g.arc(W/2, 580, 150, 0, Math.PI*2); g.stroke();
+
+    const nm = $('poIName').value.trim() || 'PRODUCT';
+    D('700', 66); g.fillStyle = t.ttl;
+    let sz = 66; D('700', sz);
+    while(g.measureText(nm).width > W-200 && sz > 30){ sz -= 2; D('700', sz); }
+    g.fillText(nm, W/2, 830);
+    F('500', 40); g.fillStyle = t.sub; g.fillText($('poSub').value.trim(), W/2, 890);
+
+    const mrp = num($('poMrp').value), pr = num($('poPrice').value);
+    if(mrp > 0){
+      const txt = 'MRP  ₹' + mrp;
+      F('500', 46); g.fillStyle = t.sub; g.fillText(txt, W/2, 975);
+      const w = g.measureText(txt).width;
+      g.strokeStyle = '#E2705A'; g.lineWidth = 6;
+      g.beginPath(); g.moveTo(W/2-w/2-8, 960); g.lineTo(W/2+w/2+8, 960); g.stroke();
+    }
+    D('700', 150); g.fillStyle = t.ttl; g.fillText('₹' + (pr || 0), W/2, 1120);
+    F('500', 38); g.fillStyle = t.acc; g.fillText($('poValid').value.trim(), W/2, 1185);
+    F('500', 32); g.fillStyle = t.sub; g.fillText(dstr(Date.now()) + '  •  ' + (S.phone || ''), W/2, 1265);
+
+  } else {
+    g.strokeStyle = t.acc; g.lineWidth = 6; rr(g,44,44,W-88,H-88,44); g.stroke();
+    D('700', 72); g.fillStyle = t.ttl; g.fillText(shop, W/2, 210);
+    F('500', 32); g.fillStyle = t.sub; g.fillText('KIRANA & GENERAL STORE', W/2, 262);
+
+    const title = $('poPTitle').value.trim();
+    g.fillStyle = t.acc; rr(g,150,360,W-300,110,55); g.fill();
+    D('700', 58); g.fillStyle = t.accTxt;
+    let ts = 58; D('700', ts);
+    while(g.measureText(title).width > W-380 && ts > 28){ ts -= 2; D('700', ts); }
+    g.fillText(title, W/2, 435);
+
+    const lines = $('poLines').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,7);
+    let y = 620;
+    lines.forEach(l=>{
+      F('600', 48); g.fillStyle = t.ttl;
+      let ls = 48; F('600', ls);
+      while(g.measureText(l).width > W-220 && ls > 24){ ls -= 2; F('600', ls); }
+      g.fillText(l, W/2, y);
+      g.strokeStyle = t.acc; g.lineWidth = 2; g.globalAlpha = .35;
+      g.beginPath(); g.moveTo(220, y+28); g.lineTo(W-220, y+28); g.stroke();
+      g.globalAlpha = 1;
+      y += 100;
+    });
+    F('500', 34); g.fillStyle = t.sub;
+    g.fillText(shopLine(), W/2, H-140);
+    F('500', 30); g.fillText(dstr(Date.now()), W/2, H-90);
+  }
+  return c;
+}
+
+function renderPoRows(){
+  $('poCount').textContent = poList.length + ' items';
+  const box = $('poRows');
+  if(!poList.length){
+    box.innerHTML = '<div class="empty"><b>Koi item nahi</b>Upar product search karke add karo — rate apne aap aa jayega.</div>';
+    return;
+  }
+  box.innerHTML = poList.map((r,i)=>
+    '<div class="lrow pend"><div class="main"><b>'+esc(r.name)+'</b></div>' +
+    '<input class="qr num" data-r1="'+i+'" value="'+esc(r.r1)+'" placeholder="U1">' +
+    '<input class="qr num" data-r2="'+i+'" value="'+esc(r.r2)+'" placeholder="U2">' +
+    '<button class="btn-x btn-ico" data-porm="'+i+'">&#10005;</button></div>').join('');
+  box.querySelectorAll('[data-r1]').forEach(inp=> inp.oninput = ()=>{ poList[+inp.dataset.r1].r1 = inp.value.trim(); });
+  box.querySelectorAll('[data-r2]').forEach(inp=> inp.oninput = ()=>{ poList[+inp.dataset.r2].r2 = inp.value.trim(); });
+  box.querySelectorAll('[data-porm]').forEach(b=> b.onclick = ()=>{ poList.splice(+b.dataset.porm,1); renderPoRows(); });
+}
+
+wireProdSug('poName','poSug', p=>{
+  poList.push({ name:p.name, r1: num(p.sell) ? String(Math.round(num(p.sell)*100)/100) : '', r2:'' });
+  $('poName').value = ''; renderPoRows(); $('poName').focus();
+}, p=> num(p.sell) ? money(p.sell) : '—');
+
+wireProdSug('poIName','poISug', p=>{
+  $('poIName').value = p.name;
+  if(p.mar) $('poSub').value = p.mar;
+  if(num(p.sell)) $('poPrice').value = num(p.sell);
+}, p=> num(p.sell) ? money(p.sell) : '—');
+
+$('poPhoto').onchange = e=>{
+  const f = e.target.files[0];
+  if(!f){ poImg = null; return; }
+  const img = new Image();
+  img.onload = ()=>{ poImg = img; toast('Photo lagi'); };
+  img.src = URL.createObjectURL(f);
+};
+
+function setPoMode(m){
+  poMode = m;
+  $('pmRate').classList.toggle('on', m === 'rate');
+  $('pmOffer').classList.toggle('on', m === 'offer');
+  $('pmPlain').classList.toggle('on', m === 'plain');
+  $('poRateBox').style.display  = m === 'rate'  ? 'block' : 'none';
+  $('poOfferBox').style.display = m === 'offer' ? 'block' : 'none';
+  $('poPlainBox').style.display = m === 'plain' ? 'block' : 'none';
+}
+$('pmRate').onclick = ()=> setPoMode('rate');
+$('pmOffer').onclick = ()=> setPoMode('offer');
+$('pmPlain').onclick = ()=> setPoMode('plain');
+
+$('bPoMake').onclick = async ()=>{
+  if(poMode === 'rate' && !poList.length){ toast('Pehle kuch item add karo'); return; }
+  if(poMode === 'offer' && !$('poIName').value.trim()){ toast('Product chuno'); return; }
+  if(poMode === 'plain' && !$('poPTitle').value.trim()){ toast('Title daalo'); return; }
+  toast('Poster ban raha hai…');
+  const c = await drawPoster();
+  const mk = (t,q)=> new Promise(r=> c.toBlob(r, t, q));
+  lastBlob = await mk('image/png');
+  lastJpg  = await mk('image/jpeg', 0.92);
+  lastName = 'poster';
+  const url = URL.createObjectURL(lastJpg);
+  $('sheetTtl').textContent = 'Poster';
+  $('sheetBody').innerHTML = '<img src="'+url+'" alt="" style="width:100%;border-radius:8px;display:block">';
+  $('sheetBody').style.background = '#fff';
+  $('bWAdirect').style.display = 'none';
+  $('pasteHint').style.display = 'none';
+  $('bCopy').style.display = 'none';
+  $('bShareImg').style.display = 'block';
+  $('bSaveImg').style.display = 'block';
+  $('sheet').classList.add('on');
+};
+
 /* ---------------- dashboard ---------------- */
 function renderDash(){
   const today = dkey(Date.now());
@@ -1905,13 +2229,15 @@ function renderDash(){
     '<span class="tag">'+(Math.round(q*100)/100)+' qty</span></div>').join('')
     : '<div class="empty"><b>Nothing sold yet</b>Save a bill and this fills up.</div>';
 
-  $('sShop').value = S.shop; $('sShopMr').value = S.shopMr; $('sPhone').value = S.phone; $('sBillNo').value = S.billNo;
+  $('sShop').value = S.shop; $('sShopMr').value = S.shopMr; $('sPhone').value = S.phone;
+  $('sVillage').value = S.village || ''; $('sBillNo').value = S.billNo;
 }
 
 $('bSet').onclick = ()=>{
   S.shop = $('sShop').value.trim() || 'ANKUSH KIRANA';
   S.shopMr = $('sShopMr').value.trim() || 'अंकुश किराणा';
   S.phone = $('sPhone').value.trim();
+  S.village = $('sVillage').value.trim();
   S.billNo = Math.max(1, parseInt($('sBillNo').value) || 1);
   save(); $('hShop').textContent = S.shop; renderCart(); toast('Settings saved');
 };
@@ -1950,7 +2276,7 @@ setLang(S.lang || 'mr');
 $('pyDate').value = isoToday();
 $('staffMob').value = S.staff || '';
 updateStaffBtn();
-fillDatalists(); renderCart(); renderProd(); renderPu();
+fillDatalists(); renderCart(); renderProd(); renderPu(); renderPoRows();
 window.addEventListener('beforeunload', save);
 
 /* ---------------- install + offline ---------------- */
