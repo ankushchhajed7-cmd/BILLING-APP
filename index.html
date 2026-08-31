@@ -2,13 +2,16 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v4.0  (31-08-2026)
+  Version : v4.1  (31-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v4.1 - Theme picker fixed. The native <select> dropdown rendered
+         unreadable on Android dark mode, so themes are now six
+         colour-swatch buttons you can see and tap.
   v4.0 - Poster Maker merged in (new POSTER tab).
          * भाव यादी — pick products from the same master, sell rate
            fills itself, two unit columns, blank cell if rate empty
@@ -140,6 +143,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{
+  color-scheme:dark;
   --ink:#08201C; --ink2:#0C2A24; --ink3:#113831;
   --brass:#D8A63D; --brass-lt:#F7E2A6; --brass-dk:#8A6416;
   --text:#EAF4F0; --dim:#8FB0A7;
@@ -215,6 +219,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--brass);box-shadow:0 0
 textarea{min-height:120px;resize:vertical;line-height:1.5}
 select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--brass) 50%),linear-gradient(135deg,var(--brass) 50%,transparent 50%);
   background-position:calc(100% - 17px) 19px,calc(100% - 12px) 19px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+
+option{background:#0B2A24;color:#EAF4F0}
+.themes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.themes button{padding:0;overflow:hidden;border:1px solid var(--line);background:#0B2A24;
+  color:var(--dim);font-size:11.5px;font-weight:600;border-radius:11px;display:block;text-align:center}
+.themes button i{display:block;height:34px;border-radius:10px 10px 0 0}
+.themes button span{display:block;padding:6px 2px}
+.themes button.on{border-color:var(--brass);color:var(--brass-lt);box-shadow:0 0 0 2px rgba(216,166,61,.25)}
 
 /* ---------- buttons ---------- */
 button{border:0;border-radius:11px;padding:12px 14px;font-weight:600;cursor:pointer}
@@ -663,15 +675,15 @@ Golu Patil 8459937759"></textarea>
       <button id="pmOffer">ऑफर</button>
       <button id="pmPlain">सामान्य</button>
     </div>
-    <label for="poTheme">Theme</label>
-    <select id="poTheme">
-      <option value="red">Classic Red</option>
-      <option value="green">Green Fresh</option>
-      <option value="haldi">Haldi Bright</option>
-      <option value="blue">Royal Blue</option>
-      <option value="black">Black Gold</option>
-      <option value="pink">Rani Pink</option>
-    </select>
+    <label>Theme</label>
+    <div class="themes" id="poThemes">
+      <button data-t="red" class="on"><i style="background:linear-gradient(180deg,#8E1A16,#3A0807)"></i><span>Classic Red</span></button>
+      <button data-t="green"><i style="background:linear-gradient(180deg,#14684A,#052018)"></i><span>Green Fresh</span></button>
+      <button data-t="haldi"><i style="background:linear-gradient(180deg,#F0AE1C,#8A5B00)"></i><span>Haldi Bright</span></button>
+      <button data-t="blue"><i style="background:linear-gradient(180deg,#1B4A93,#061530)"></i><span>Royal Blue</span></button>
+      <button data-t="black"><i style="background:linear-gradient(180deg,#2A2A2A,#000)"></i><span>Black Gold</span></button>
+      <button data-t="pink"><i style="background:linear-gradient(180deg,#C2185B,#440621)"></i><span>Rani Pink</span></button>
+    </div>
   </div>
 
   <div class="card" id="poRateBox">
@@ -1976,7 +1988,7 @@ const THEMES = {
   pink:  { a:'#C2185B', b:'#440621', hdr:'#96124A', acc:'#FFD1E3', ttl:'#FFEAF2', sub:'#F1AFC9',
            panel:'#FFFAFC', zebra:'#FCE4EE', nm:'#3A0A20', rt:'#C2185B', accTxt:'#440621' }
 };
-let poList = [], poMode = 'rate', poImg = null;
+let poList = [], poMode = 'rate', poImg = null, poTheme = 'red';
 let lastName = 'bill';
 
 function rr(g,x,y,w,h,r){
@@ -1993,7 +2005,7 @@ function shopLine(){
 
 async function drawPoster(){
   try{ await document.fonts.ready; }catch(e){}
-  const t = THEMES[$('poTheme').value] || THEMES.red;
+  const t = THEMES[poTheme] || THEMES.red;
   const W = 1080;
   const rows = poList;
   let H = 1350;
@@ -2163,6 +2175,13 @@ function setPoMode(m){
   $('poOfferBox').style.display = m === 'offer' ? 'block' : 'none';
   $('poPlainBox').style.display = m === 'plain' ? 'block' : 'none';
 }
+document.querySelectorAll('#poThemes button').forEach(b=>{
+  b.onclick = ()=>{
+    poTheme = b.dataset.t;
+    document.querySelectorAll('#poThemes button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+  };
+});
 $('pmRate').onclick = ()=> setPoMode('rate');
 $('pmOffer').onclick = ()=> setPoMode('offer');
 $('pmPlain').onclick = ()=> setPoMode('plain');
