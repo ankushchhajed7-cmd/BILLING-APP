@@ -2,16 +2,20 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v4.1  (31-08-2026)
+  Version : v4.2  (31-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
-  v4.1 - Theme picker fixed. The native <select> dropdown rendered
-         unreadable on Android dark mode, so themes are now six
-         colour-swatch buttons you can see and tap.
+  v4.2 - One button now covers both numbers.
+         * "Send WhatsApp" opens the customer's chat, then the
+           salesman's chat opens by itself when you come back
+         * The standing "Copy to" button is gone; a "Bhejo → number"
+           button only appears if the second chat did not open
+         * New bill clears anything pending
+  v4.1 - Theme picker fixed.
   v4.0 - Poster Maker merged in (new POSTER tab).
          * भाव यादी — pick products from the same master, sell rate
            fills itself, two unit columns, blank cell if rate empty
@@ -472,7 +476,7 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
     </div>
     <div class="g2" style="margin-bottom:8px">
       <button class="btn-gold" id="bSave">Save changes</button>
-      <button class="btn-wa" id="bWAtext">Send on WhatsApp</button>
+      <button class="btn-wa" id="bWAtext">Send WhatsApp</button>
     </div>
     <button class="btn-wa full" id="bStaffSend" style="margin-bottom:8px;display:none">Copy to staff</button>
     <div class="g2" style="margin-bottom:8px">
@@ -1330,6 +1334,21 @@ function openExt(url){
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+let pendingStaff = null;
+function showPending(){
+  const b = $('bStaffSend');
+  if(pendingStaff){
+    b.style.display = 'block';
+    b.textContent = 'Bhejo → ' + pendingStaff.no;
+  } else { b.style.display = 'none'; }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && pendingStaff && !pendingStaff.tried){
+    pendingStaff.tried = true;
+    setTimeout(()=>{ if(pendingStaff) openExt(pendingStaff.url); }, 500);
+  }
+});
+
 $('bWAtext').onclick = ()=>{
   if(!cart.length){ toast('Bill is empty'); return; }
   const mob = $('cMob').value.replace(/\D/g,'');
@@ -1337,8 +1356,19 @@ $('bWAtext').onclick = ()=>{
   const bill = saveBill(true);
   const msg = buildMsg(S.lang, bill);
   const wa = mob.length === 10 ? '91' + mob : mob;
+  const staff = (S.staff || '').replace(/\D/g,'');
+
   openExt('https://wa.me/' + wa + '?text=' + encodeURIComponent(msg));
-  toast('Bill #' + bill.no + ' saved and opened in WhatsApp');
+
+  if(staff.length === 10 && staff !== mob.slice(-10)){
+    pendingStaff = { no: staff, tried: false,
+                     url: 'https://wa.me/91' + staff + '?text=' + encodeURIComponent(msg) };
+    showPending();
+    toast('Customer ko bheja — wapas aate hi ' + staff + ' ka chat khulega');
+  } else {
+    pendingStaff = null; showPending();
+    toast('Bill #' + bill.no + ' WhatsApp mein khula');
+  }
 };
 
 /* ---------------- printed-style bill image ---------------- */
@@ -1537,13 +1567,7 @@ async function shareImage(){
   saveImage();
 }
 
-function updateStaffBtn(){
-  const b = $('bStaffSend');
-  if(S.staff && S.staff.length === 10){
-    b.style.display = 'block';
-    b.textContent = 'Copy to ' + S.staff;
-  } else { b.style.display = 'none'; }
-}
+function updateStaffBtn(){ showPending(); }
 $('staffMob').addEventListener('change', ()=>{
   const m = $('staffMob').value.replace(/\D/g,'').slice(-10);
   if(m && m.length !== 10){ toast('10 digit number daalo'); return; }
@@ -1551,16 +1575,16 @@ $('staffMob').addEventListener('change', ()=>{
   toast(m ? 'Fixed number save ho gaya' : 'Fixed number hata diya');
 });
 $('bStaffSend').onclick = ()=>{
+  if(pendingStaff){ openExt(pendingStaff.url); pendingStaff = null; showPending(); return; }
   if(!cart.length){ toast('Bill is empty'); return; }
   if(!(S.staff && S.staff.length === 10)){ toast('Pehle fixed number daalo'); return; }
   const bill = saveBill(true);
   openExt('https://wa.me/91' + S.staff + '?text=' + encodeURIComponent(buildMsg(S.lang, bill)));
-  toast('Bill #' + bill.no + ' copy bheja');
 };
 
 $('bClear').onclick = ()=>{
   if(cart.length && !confirm('Start a new bill? Unsaved items will be cleared.')) return;
-  cart = []; editingBillId = null;
+  cart = []; editingBillId = null; pendingStaff = null; showPending();
   $('cName').value=''; $('cMob').value=''; $('tDisc').value='0';
   renderCart(); toast('New bill');
 };
