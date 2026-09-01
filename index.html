@@ -2,7 +2,21 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v4.2  (31-08-2026)
+  Version : v4.3  (01-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v4.3 - Read the computer bill from a photo.
+         * "Photo se bill padho" on the billing screen: take a photo
+           of the GST Business Soft estimate, Gemini reads the item
+           table and fills the bill with name / qty / rate
+         * Names are matched to the product master where possible
+         * Warns if the read total does not match the bill total
+         * Gemini API key lives in Dashboard -> Shop settings
+  v4.2  (31-08-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -454,6 +468,16 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
   </div>
 
   <div class="card">
+    <div class="ttl">Computer bill photo <span class="hint">AI reads it</span></div>
+    <input type="file" id="ocrFile" accept="image/*" style="display:none">
+    <button class="btn-gold full" id="bOcr">Photo se bill padho</button>
+    <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0">
+      Computer ke bill ki photo lo — item, qty aur rate apne aap neeche bill mein bhar jayenge.
+      Bhejne se pehle rate ek baar check kar lena. Internet aur Gemini key chahiye (Dashboard &rarr; settings).
+    </p>
+  </div>
+
+  <div class="card">
     <div class="ttl">Bill <span class="hint" id="itemCount">0 items</span></div>
     <div id="cartList"><div class="empty"><b>No items yet</b>Add a product above to start the bill.</div></div>
     <div style="margin-top:10px">
@@ -790,6 +814,10 @@ Golu Patil 8459937759"></textarea>
       </div>
     </div>
     <div style="margin-bottom:10px">
+      <label for="sGkey">Gemini API key <span style="text-transform:none;letter-spacing:0">— bill photo padhne ke liye</span></label>
+      <input id="sGkey" placeholder="AIza..." autocomplete="off">
+    </div>
+    <div style="margin-bottom:10px">
       <label for="sVillage">Gaon / area <span style="text-transform:none;letter-spacing:0">— poster par dikhega</span></label>
       <input id="sVillage" placeholder="उदा. ताहाराबाद">
     </div>
@@ -851,7 +879,7 @@ let P = DB.get('ak_products', []);
 let C = DB.get('ak_customers', []);
 let B = DB.get('ak_bills', []);
 let PU = DB.get('ak_purchases', []);
-let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
+let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', gkey:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
 let cart = [];
 let editingBillId = null;
 
@@ -1770,6 +1798,107 @@ $('bCAdd').onclick = ()=>{
 };
 $('ncMob').addEventListener('keydown', e=>{ if(e.key === 'Enter') $('bCAdd').click(); });
 
+/* ---------------- read a computer bill from a photo ---------------- */
+const GMODELS = ['gemini-2.5-flash','gemini-2.0-flash','gemini-1.5-flash'];
+
+function fileToSmallJpeg(file, maxSide){
+  return new Promise((res, rej)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let w = img.width, h = img.height;
+      const sc = Math.min(1, maxSide / Math.max(w,h));
+      w = Math.round(w*sc); h = Math.round(h*sc);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      res(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = ()=> rej(new Error('image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function geminiReadBill(b64, key){
+  const prompt =
+    'This is a photo of a shop bill (estimate) from billing software. ' +
+    'Read every line of the items table. ' +
+    'Reply with ONLY raw JSON, no markdown, no explanation, in exactly this shape: ' +
+    '{"items":[{"name":"ITEM NAME","qty":0,"rate":0}],"total":0}. ' +
+    'Copy each item name exactly as printed. qty and rate are plain numbers. ' +
+    'rate is the RATE column (price of one), not the AMOUNT column. ' +
+    'total is the bill total amount. If a value is unreadable use 0.';
+  let lastErr = '';
+  for(const model of GMODELS){
+    try{
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model +
+        ':generateContent?key=' + encodeURIComponent(key), {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          contents:[{ parts:[ { text: prompt }, { inline_data:{ mime_type:'image/jpeg', data: b64 } } ] }],
+          generationConfig:{ temperature: 0 }
+        })
+      });
+      if(!r.ok){ lastErr = model + ': ' + r.status; continue; }
+      const d = await r.json();
+      const txt = ((((d.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('');
+      const clean = txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+      const a = clean.indexOf('{'), b = clean.lastIndexOf('}');
+      if(a < 0 || b < 0){ lastErr = 'JSON nahi mila'; continue; }
+      return JSON.parse(clean.slice(a, b+1));
+    }catch(e){ lastErr = e.message || e.name; }
+  }
+  throw new Error(lastErr || 'padha nahi gaya');
+}
+
+$('bOcr').onclick = ()=>{
+  if(!(S.gkey || '').trim()){
+    toast('Pehle Dashboard mein Gemini API key daalo');
+    document.querySelector('nav button[data-v="dash"]').click();
+    setTimeout(()=> $('sGkey').focus(), 300);
+    return;
+  }
+  $('ocrFile').click();
+};
+
+$('ocrFile').onchange = async e=>{
+  const f = e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  const btn = $('bOcr');
+  btn.disabled = true; btn.textContent = 'Bill padha ja raha hai…';
+  try{
+    const b64 = await fileToSmallJpeg(f, 1600);
+    const out = await geminiReadBill(b64, S.gkey.trim());
+    const items = Array.isArray(out.items) ? out.items : [];
+    if(!items.length){ toast('Is photo mein koi item nahi mila'); return; }
+
+    let added = 0;
+    items.forEach(it=>{
+      const name = String(it.name || '').trim();
+      const qty = num(it.qty), rate = num(it.rate);
+      if(!name || qty <= 0) return;
+      const p = findProd(name);
+      cart.push({ name: p ? p.name : name, mar: p ? (p.mar||'') : '',
+                  qty, rate, pur: p ? num(p.pur) : 0 });
+      added++;
+    });
+    renderCart();
+
+    const mine = cart.reduce((s,i)=> s + i.qty*i.rate, 0);
+    const theirs = num(out.total);
+    if(theirs > 0 && Math.abs(theirs - mine) > 1){
+      toast(added + ' items — total ' + money(mine) + ' vs bill ' + money(theirs) + ', check karo');
+    } else {
+      toast(added + ' items padhe — rate check karke bhejo');
+    }
+  }catch(err){
+    toast('Padha nahi gaya: ' + (err.message || err.name));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Photo se bill padho';
+  }
+};
+
 /* ---------------- purchase / suppliers ---------------- */
 let puCart = [];
 
@@ -2273,7 +2402,7 @@ function renderDash(){
     : '<div class="empty"><b>Nothing sold yet</b>Save a bill and this fills up.</div>';
 
   $('sShop').value = S.shop; $('sShopMr').value = S.shopMr; $('sPhone').value = S.phone;
-  $('sVillage').value = S.village || ''; $('sBillNo').value = S.billNo;
+  $('sVillage').value = S.village || ''; $('sGkey').value = S.gkey || ''; $('sBillNo').value = S.billNo;
 }
 
 $('bSet').onclick = ()=>{
@@ -2281,6 +2410,7 @@ $('bSet').onclick = ()=>{
   S.shopMr = $('sShopMr').value.trim() || 'अंकुश किराणा';
   S.phone = $('sPhone').value.trim();
   S.village = $('sVillage').value.trim();
+  S.gkey = $('sGkey').value.trim();
   S.billNo = Math.max(1, parseInt($('sBillNo').value) || 1);
   save(); $('hShop').textContent = S.shop; renderCart(); toast('Settings saved');
 };
