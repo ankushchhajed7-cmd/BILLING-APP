@@ -2,7 +2,19 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v4.3  (01-09-2026)
+  Version : v4.4  (02-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v4.4 - Bill photo reading fixed (was failing with 404).
+         * The app now asks Google which models the key can use
+           instead of guessing fixed model names
+         * Picks the best flash model available, tries up to 4
+         * Shows Google's real error text, not just a status code
+  v4.3  (01-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -1799,8 +1811,6 @@ $('bCAdd').onclick = ()=>{
 $('ncMob').addEventListener('keydown', e=>{ if(e.key === 'Enter') $('bCAdd').click(); });
 
 /* ---------------- read a computer bill from a photo ---------------- */
-const GMODELS = ['gemini-2.5-flash','gemini-2.0-flash','gemini-1.5-flash'];
-
 function fileToSmallJpeg(file, maxSide){
   return new Promise((res, rej)=>{
     const img = new Image();
@@ -1813,9 +1823,37 @@ function fileToSmallJpeg(file, maxSide){
       c.getContext('2d').drawImage(img, 0, 0, w, h);
       res(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
     };
-    img.onerror = ()=> rej(new Error('image'));
+    img.onerror = ()=> rej(new Error('photo padhi nahi gayi'));
     img.src = URL.createObjectURL(file);
   });
+}
+
+let gModels = null;
+
+async function geminiModels(key){
+  if(gModels && gModels.length) return gModels;
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(key));
+  const j = await r.json().catch(()=>null);
+  if(!r.ok){
+    throw new Error((j && j.error && j.error.message) ? j.error.message.slice(0,90) : ('models ' + r.status));
+  }
+  const bad = /embedding|aqa|imagen|veo|tts|audio|live|vision-latest/i;
+  gModels = (j.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => String(m.name || '').replace(/^models\//,''))
+    .filter(n => n && !bad.test(n))
+    .sort((x,y)=> score(y) - score(x))
+    .slice(0,4);
+  function score(n){
+    let s = 0;
+    if(/flash/i.test(n)) s += 10;
+    if(/2\.5/.test(n)) s += 4; else if(/2\.0/.test(n)) s += 3; else if(/1\.5/.test(n)) s += 1;
+    if(/lite/i.test(n)) s -= 2;
+    if(/preview|exp/i.test(n)) s -= 3;
+    return s;
+  }
+  if(!gModels.length) throw new Error('Is key ke liye koi model nahi mila');
+  return gModels;
 }
 
 async function geminiReadBill(b64, key){
@@ -1827,8 +1865,10 @@ async function geminiReadBill(b64, key){
     'Copy each item name exactly as printed. qty and rate are plain numbers. ' +
     'rate is the RATE column (price of one), not the AMOUNT column. ' +
     'total is the bill total amount. If a value is unreadable use 0.';
+
+  const models = await geminiModels(key);
   let lastErr = '';
-  for(const model of GMODELS){
+  for(const model of models){
     try{
       const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model +
         ':generateContent?key=' + encodeURIComponent(key), {
@@ -1839,13 +1879,16 @@ async function geminiReadBill(b64, key){
           generationConfig:{ temperature: 0 }
         })
       });
-      if(!r.ok){ lastErr = model + ': ' + r.status; continue; }
-      const d = await r.json();
+      const d = await r.json().catch(()=>null);
+      if(!r.ok){
+        lastErr = (d && d.error && d.error.message) ? d.error.message.slice(0,90) : (model + ': ' + r.status);
+        continue;
+      }
       const txt = ((((d.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('');
       const clean = txt.replace(/```json/gi,'').replace(/```/g,'').trim();
-      const a = clean.indexOf('{'), b = clean.lastIndexOf('}');
-      if(a < 0 || b < 0){ lastErr = 'JSON nahi mila'; continue; }
-      return JSON.parse(clean.slice(a, b+1));
+      const i = clean.indexOf('{'), j2 = clean.lastIndexOf('}');
+      if(i < 0 || j2 < 0){ lastErr = 'JSON nahi mila'; continue; }
+      return JSON.parse(clean.slice(i, j2+1));
     }catch(e){ lastErr = e.message || e.name; }
   }
   throw new Error(lastErr || 'padha nahi gaya');
