@@ -2,7 +2,32 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v4.5  (02-09-2026)
+  Version : v5.1  (02-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v5.1 - Dashboard recoloured to the app's own brass + green.
+         Same layout as v5.0, no violet.
+  v5.0  (02-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v5.0 - New Dashboard (violet), design 2.
+         * Curved header with a greeting
+         * "Aaj" = two big cards only: sale and bills
+         * Quick start: New Bill / Product / Customer / Purchase /
+           Poster / Report — Report opens the old detail panel
+           (profit, month sale, top items, settings, backup)
+         * Recent bills — tap one to reopen and resend it
+         * Counts: products, customers, suppliers, bills
+         * 7-day chart removed from the top
+  v4.5  (02-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -398,6 +423,51 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
 .hrow .hd{font-size:12px;color:var(--dim);white-space:nowrap}
 .hrow.low .hr{color:#7BE0A2}
 
+/* ---------- dashboard (violet) ---------- */
+#v-dash{--dv1:#0A2620;--dv2:#061916;--dhero:#0C2A24;--dcard:#12332C;--dline:rgba(216,166,61,.22);
+  --dink:#EAF4F0;--ddim:#8FB0A7;--dacc:#D8A63D}
+#v-dash{margin:-12px -12px 0;padding:0 12px 8px;
+  background:linear-gradient(180deg,var(--dv1),var(--dv2) 55%,var(--dv2))}
+.dhero{position:relative;margin:0 -12px 14px;padding:18px 20px 46px;overflow:hidden;
+  background:var(--dhero);border-radius:0 0 6px 6px}
+.dhero::after{content:"";position:absolute;left:-15%;right:-15%;bottom:-150px;height:230px;
+  border-radius:50% 50% 0 0;background:var(--dv1);border-top:3px solid var(--dacc)}
+.dhero h2{font-family:var(--f-disp);font-size:27px;letter-spacing:.5px;color:var(--brass-lt);margin:0}
+.dhero p{margin:4px 0 0;font-size:13.5px;color:#9CC0B5}
+.dsec{font-family:var(--f-disp);font-size:19px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dink);margin:14px 2px 9px}
+.dstat{border-radius:16px;padding:14px 12px;text-align:center}
+.dstat.a{color:#241800;
+  background:linear-gradient(180deg,#F7E2A6 0%,#D8A63D 16%,#A2751A 54%,#D8A63D 80%,#F3D894 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),inset 0 -2px 3px rgba(0,0,0,.35),0 6px 16px rgba(0,0,0,.4)}
+.dstat.b{color:var(--brass-lt);
+  background:linear-gradient(180deg,#2C6F60 0%,#1A4A40 16%,#0B2C26 55%,#1A4A40 82%,#2E7365 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -2px 3px rgba(0,0,0,.5),0 6px 16px rgba(0,0,0,.4)}
+.dstat span{display:block;font-size:11.5px;letter-spacing:1.4px;opacity:.85;font-weight:600}
+.dstat b{display:block;font-family:var(--f-disp);font-size:34px;line-height:1.15;margin-top:4px}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.dgrid button{background:var(--dcard);border:1px solid var(--dline);border-radius:16px;
+  padding:13px 4px 10px;color:var(--dink);font-size:12.5px;font-weight:600;
+  display:flex;flex-direction:column;align-items:center;gap:7px}
+.dgrid button svg{width:24px;height:24px;stroke:var(--dacc);fill:none;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+.dcard{background:var(--dcard);border-color:var(--dline)}
+.dcard .ttl{color:var(--dacc)}
+.drow{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--dline)}
+.drow:last-child{border-bottom:0}
+.drow .av{width:38px;height:38px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(180deg,#F7E2A6,#D8A63D);color:#241800;font-weight:700;font-size:16px}
+.drow .mn{flex:1;min-width:0}
+.drow .mn b{display:block;font-weight:600;font-size:14.5px;color:var(--dink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drow .mn small{color:var(--ddim);font-size:11.5px}
+.drow .amt{font-weight:700;color:var(--dacc);white-space:nowrap}
+.dchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 4px}
+.dchips div{background:var(--dcard);border:1px solid var(--dline);border-radius:14px;
+  padding:10px 2px;text-align:center}
+.dchips b{display:block;font-family:var(--f-disp);font-size:21px;color:var(--dacc)}
+.dchips span{font-size:10.5px;color:var(--ddim)}
+
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
   background:linear-gradient(180deg,#F7E2A6,#D8A63D);color:#241800;padding:11px 18px;border-radius:11px;
@@ -784,6 +854,40 @@ Golu Patil 8459937759"></textarea>
 
 <!-- ============ DASHBOARD ============ -->
 <section id="v-dash" class="view">
+  <div class="dhero">
+    <h2 id="dGreet">Namaste</h2>
+    <p>Aaj ka hisaab, ek nazar mein</p>
+  </div>
+
+  <div class="dsec">Aaj</div>
+  <div class="g2">
+    <div class="dstat a"><span>AAJ KA SALE</span><b class="num" id="dSale2">&#8377;0</b></div>
+    <div class="dstat b"><span>BILLS</span><b class="num" id="dBills2">0</b></div>
+  </div>
+
+  <div class="dsec">Quick start</div>
+  <div class="dgrid">
+    <button data-go="bill"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>New Bill</button>
+    <button data-go="prod"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>Product</button>
+    <button data-go="cust"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>Customer</button>
+    <button data-go="pur"><svg viewBox="0 0 24 24"><path d="M3 6h15l-1.5 9h-12z"/><circle cx="8" cy="20" r="1.3"/><circle cx="16" cy="20" r="1.3"/></svg>Purchase</button>
+    <button data-go="post"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Poster</button>
+    <button data-go="report"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Report</button>
+  </div>
+
+  <div class="card dcard" style="margin-top:14px">
+    <div class="ttl">Recent bills <span class="hint" id="dRecN">0</span></div>
+    <div id="dRecent"></div>
+  </div>
+
+  <div class="dchips">
+    <div><b id="nProd">0</b><span>Products</span></div>
+    <div><b id="nCust">0</b><span>Customers</span></div>
+    <div><b id="nSup">0</b><span>Suppliers</span></div>
+    <div><b id="nBill">0</b><span>Bills</span></div>
+  </div>
+
+  <div id="dashMore" style="display:none">
   <div class="tiles">
     <div class="tile gold"><div class="k">Today sale</div><div><div class="v num" id="dSale">₹0</div><div class="s" id="dBills">0 bills</div></div></div>
     <div class="tile green"><div class="k">Today profit</div><div><div class="v num" id="dProfit">₹0</div><div class="s">purchase vs sell</div></div></div>
@@ -840,6 +944,7 @@ Golu Patil 8459937759"></textarea>
       All data stays on this phone. Take a backup every few days and keep the file in Drive — clearing
       browser data will erase everything.
     </p>
+  </div>
   </div>
 </section>
 
@@ -2260,9 +2365,50 @@ function renderDash(){
     '<span class="tag">'+(Math.round(q*100)/100)+' qty</span></div>').join('')
     : '<div class="empty"><b>Nothing sold yet</b>Save a bill and this fills up.</div>';
 
+  // --- new dashboard top block
+  const first = (S.shop || 'Ankush').trim().split(/\s+/)[0];
+  $('dGreet').textContent = 'Namaste, ' + first.charAt(0) + first.slice(1).toLowerCase();
+  $('dSale2').textContent = money0(tSale);
+  $('dBills2').textContent = tBills;
+  $('nProd').textContent = P.length;
+  $('nCust').textContent = C.length;
+  $('nSup').textContent = suppliers().length;
+  $('nBill').textContent = B.length;
+
+  const rb = $('dRecent');
+  $('dRecN').textContent = B.length;
+  rb.innerHTML = B.length ? B.slice(0,5).map(b=>{
+    const nm = b.cName || 'Cash';
+    return '<div class="drow" data-open2="'+esc(b.id)+'">' +
+      '<span class="av">'+esc(nm.charAt(0).toUpperCase())+'</span>' +
+      '<span class="mn"><b>'+esc(nm)+'</b><small>Bill #'+b.no+' &middot; '+dstr(b.date)+'</small></span>' +
+      '<span class="amt num">'+money0(b.grand)+'</span></div>';
+  }).join('') : '<div class="empty"><b>Koi bill nahi</b>Pehla bill banate hi yahan dikhega.</div>';
+  rb.querySelectorAll('[data-open2]').forEach(r=> r.onclick = ()=>{
+    const b = B.find(x=>x.id === r.dataset.open2); if(!b) return;
+    cart = JSON.parse(JSON.stringify(b.items));
+    editingBillId = b.id;
+    $('cName').value = b.cName; $('cMob').value = b.cMobile; $('tDisc').value = b.disc || 0;
+    document.querySelector('nav button[data-v="bill"]').click();
+    renderCart(); toast('Bill #' + b.no + ' khula');
+  });
+
   $('sShop').value = S.shop; $('sShopMr').value = S.shopMr; $('sPhone').value = S.phone;
   $('sVillage').value = S.village || ''; $('sBillNo').value = S.billNo;
 }
+
+document.querySelectorAll('.dgrid button').forEach(b=>{
+  b.onclick = ()=>{
+    const go = b.dataset.go;
+    if(go === 'report'){
+      const m = $('dashMore');
+      m.style.display = m.style.display === 'none' ? 'block' : 'none';
+      if(m.style.display === 'block') m.scrollIntoView({behavior:'smooth', block:'start'});
+      return;
+    }
+    document.querySelector('nav button[data-v="'+go+'"]').click();
+  };
+});
 
 $('bSet').onclick = ()=>{
   S.shop = $('sShop').value.trim() || 'ANKUSH KIRANA';
