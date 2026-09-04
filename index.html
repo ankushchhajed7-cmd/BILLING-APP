@@ -2,7 +2,20 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v4.4  (02-09-2026)
+  Version : v4.5  (02-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v4.5 - Removed what wasn't working.
+         * "Pick from phone contacts" (billing) and "From contacts"
+           (customers) gone — Chrome's contact picker never worked
+           on this phone. Bulk add and the .vcf import stay.
+         * "Photo se bill padho" removed
+         * Gemini API key setting removed
+  v4.4  (02-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -452,7 +465,6 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
         <input id="cMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
       </div>
     </div>
-    <button class="btn btn-sm full" id="bPickB" style="margin-top:8px">Pick from phone contacts</button>
   </div>
 
   <div class="card">
@@ -477,16 +489,6 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(216,166,61,.5))}
         <button class="btn-gold full" id="bAdd">Add</button>
       </div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="ttl">Computer bill photo <span class="hint">AI reads it</span></div>
-    <input type="file" id="ocrFile" accept="image/*" style="display:none">
-    <button class="btn-gold full" id="bOcr">Photo se bill padho</button>
-    <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0">
-      Computer ke bill ki photo lo — item, qty aur rate apne aap neeche bill mein bhar jayenge.
-      Bhejne se pehle rate ek baar check kar lena. Internet aur Gemini key chahiye (Dashboard &rarr; settings).
-    </p>
   </div>
 
   <div class="card">
@@ -597,13 +599,7 @@ Tea Powder 250g, 108, 125"></textarea>
         <input id="ncMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
       </div>
     </div>
-    <div class="g2">
-      <button class="btn-gold" id="bCAdd">Save customer</button>
-      <button class="btn" id="bPickC">From contacts</button>
-    </div>
-    <p style="color:var(--dim);font-size:12px;line-height:1.5;margin:8px 2px 0">
-      "From contacts" se phone ki contact list khulegi — ek saath kai customer chun sakte ho.
-    </p>
+    <button class="btn-gold full" id="bCAdd">Save customer</button>
   </div>
 
   <div class="card">
@@ -826,10 +822,6 @@ Golu Patil 8459937759"></textarea>
       </div>
     </div>
     <div style="margin-bottom:10px">
-      <label for="sGkey">Gemini API key <span style="text-transform:none;letter-spacing:0">— bill photo padhne ke liye</span></label>
-      <input id="sGkey" placeholder="AIza..." autocomplete="off">
-    </div>
-    <div style="margin-bottom:10px">
       <label for="sVillage">Gaon / area <span style="text-transform:none;letter-spacing:0">— poster par dikhega</span></label>
       <input id="sVillage" placeholder="उदा. ताहाराबाद">
     </div>
@@ -891,7 +883,7 @@ let P = DB.get('ak_products', []);
 let C = DB.get('ak_customers', []);
 let B = DB.get('ak_bills', []);
 let PU = DB.get('ak_purchases', []);
-let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', gkey:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
+let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
 let cart = [];
 let editingBillId = null;
 
@@ -1685,44 +1677,6 @@ function renderCust(){
 }
 $('cSearch').oninput = renderCust;
 
-/* ---------------- phone contact picker ---------------- */
-async function pickContacts(multiple){
-  if(!(navigator.contacts && navigator.contacts.select)){
-    toast('Contact picker sirf Chrome (Android) mein chalta hai');
-    return null;
-  }
-  try{
-    const res = await navigator.contacts.select(['name','tel'], { multiple });
-    if(!res || !res.length){ toast('Koi contact select nahi hua'); return null; }
-    return res;
-  }catch(e){
-    toast('Contact picker: ' + e.name);
-    return null;
-  }
-}
-function contactBits(c){
-  let name = '';
-  if(c.name && c.name.length) name = String(c.name[0] || '').trim();
-  let raw = '';
-  if(c.tel && c.tel.length){
-    const t = c.tel[0];
-    raw = (t && typeof t === 'object') ? (t.value || t.tel || '') : String(t || '');
-  }
-  const mob = String(raw).replace(/\D/g,'').slice(-10);
-  return { name, mob };
-}
-
-$('bPickB').onclick = async ()=>{
-  const res = await pickContacts(false);
-  if(!res) return;
-  const { name, mob } = contactBits(res[0]);
-  if(!name && !mob){ toast('Is contact mein naam/number nahi hai'); return; }
-  if(name) $('cName').value = name;
-  if(mob) $('cMob').value = mob;
-  saveCustomer(); save(); fillDatalists();
-  toast((name || mob) + ' added');
-};
-
 function addCustomerList(arr){
   let added = 0, upd = 0, skip = 0;
   arr.forEach(({name, mob})=>{
@@ -1788,12 +1742,6 @@ $('fVcf').onchange = async e=>{
   e.target.value = '';
 };
 
-$('bPickC').onclick = async ()=>{
-  const res = await pickContacts(true);
-  if(!res) return;
-  addCustomerList(res.map(contactBits).map(x=>({ name:x.name, mob:x.mob })));
-};
-
 $('bCAdd').onclick = ()=>{
   const name = $('ncName').value.trim();
   const mob = $('ncMob').value.replace(/\D/g,'').slice(-10);
@@ -1809,138 +1757,6 @@ $('bCAdd').onclick = ()=>{
   renderCust(); fillDatalists();
 };
 $('ncMob').addEventListener('keydown', e=>{ if(e.key === 'Enter') $('bCAdd').click(); });
-
-/* ---------------- read a computer bill from a photo ---------------- */
-function fileToSmallJpeg(file, maxSide){
-  return new Promise((res, rej)=>{
-    const img = new Image();
-    img.onload = ()=>{
-      let w = img.width, h = img.height;
-      const sc = Math.min(1, maxSide / Math.max(w,h));
-      w = Math.round(w*sc); h = Math.round(h*sc);
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
-      res(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
-    };
-    img.onerror = ()=> rej(new Error('photo padhi nahi gayi'));
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-let gModels = null;
-
-async function geminiModels(key){
-  if(gModels && gModels.length) return gModels;
-  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(key));
-  const j = await r.json().catch(()=>null);
-  if(!r.ok){
-    throw new Error((j && j.error && j.error.message) ? j.error.message.slice(0,90) : ('models ' + r.status));
-  }
-  const bad = /embedding|aqa|imagen|veo|tts|audio|live|vision-latest/i;
-  gModels = (j.models || [])
-    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-    .map(m => String(m.name || '').replace(/^models\//,''))
-    .filter(n => n && !bad.test(n))
-    .sort((x,y)=> score(y) - score(x))
-    .slice(0,4);
-  function score(n){
-    let s = 0;
-    if(/flash/i.test(n)) s += 10;
-    if(/2\.5/.test(n)) s += 4; else if(/2\.0/.test(n)) s += 3; else if(/1\.5/.test(n)) s += 1;
-    if(/lite/i.test(n)) s -= 2;
-    if(/preview|exp/i.test(n)) s -= 3;
-    return s;
-  }
-  if(!gModels.length) throw new Error('Is key ke liye koi model nahi mila');
-  return gModels;
-}
-
-async function geminiReadBill(b64, key){
-  const prompt =
-    'This is a photo of a shop bill (estimate) from billing software. ' +
-    'Read every line of the items table. ' +
-    'Reply with ONLY raw JSON, no markdown, no explanation, in exactly this shape: ' +
-    '{"items":[{"name":"ITEM NAME","qty":0,"rate":0}],"total":0}. ' +
-    'Copy each item name exactly as printed. qty and rate are plain numbers. ' +
-    'rate is the RATE column (price of one), not the AMOUNT column. ' +
-    'total is the bill total amount. If a value is unreadable use 0.';
-
-  const models = await geminiModels(key);
-  let lastErr = '';
-  for(const model of models){
-    try{
-      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model +
-        ':generateContent?key=' + encodeURIComponent(key), {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({
-          contents:[{ parts:[ { text: prompt }, { inline_data:{ mime_type:'image/jpeg', data: b64 } } ] }],
-          generationConfig:{ temperature: 0 }
-        })
-      });
-      const d = await r.json().catch(()=>null);
-      if(!r.ok){
-        lastErr = (d && d.error && d.error.message) ? d.error.message.slice(0,90) : (model + ': ' + r.status);
-        continue;
-      }
-      const txt = ((((d.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('');
-      const clean = txt.replace(/```json/gi,'').replace(/```/g,'').trim();
-      const i = clean.indexOf('{'), j2 = clean.lastIndexOf('}');
-      if(i < 0 || j2 < 0){ lastErr = 'JSON nahi mila'; continue; }
-      return JSON.parse(clean.slice(i, j2+1));
-    }catch(e){ lastErr = e.message || e.name; }
-  }
-  throw new Error(lastErr || 'padha nahi gaya');
-}
-
-$('bOcr').onclick = ()=>{
-  if(!(S.gkey || '').trim()){
-    toast('Pehle Dashboard mein Gemini API key daalo');
-    document.querySelector('nav button[data-v="dash"]').click();
-    setTimeout(()=> $('sGkey').focus(), 300);
-    return;
-  }
-  $('ocrFile').click();
-};
-
-$('ocrFile').onchange = async e=>{
-  const f = e.target.files[0];
-  e.target.value = '';
-  if(!f) return;
-  const btn = $('bOcr');
-  btn.disabled = true; btn.textContent = 'Bill padha ja raha hai…';
-  try{
-    const b64 = await fileToSmallJpeg(f, 1600);
-    const out = await geminiReadBill(b64, S.gkey.trim());
-    const items = Array.isArray(out.items) ? out.items : [];
-    if(!items.length){ toast('Is photo mein koi item nahi mila'); return; }
-
-    let added = 0;
-    items.forEach(it=>{
-      const name = String(it.name || '').trim();
-      const qty = num(it.qty), rate = num(it.rate);
-      if(!name || qty <= 0) return;
-      const p = findProd(name);
-      cart.push({ name: p ? p.name : name, mar: p ? (p.mar||'') : '',
-                  qty, rate, pur: p ? num(p.pur) : 0 });
-      added++;
-    });
-    renderCart();
-
-    const mine = cart.reduce((s,i)=> s + i.qty*i.rate, 0);
-    const theirs = num(out.total);
-    if(theirs > 0 && Math.abs(theirs - mine) > 1){
-      toast(added + ' items — total ' + money(mine) + ' vs bill ' + money(theirs) + ', check karo');
-    } else {
-      toast(added + ' items padhe — rate check karke bhejo');
-    }
-  }catch(err){
-    toast('Padha nahi gaya: ' + (err.message || err.name));
-  }finally{
-    btn.disabled = false; btn.textContent = 'Photo se bill padho';
-  }
-};
 
 /* ---------------- purchase / suppliers ---------------- */
 let puCart = [];
@@ -2445,7 +2261,7 @@ function renderDash(){
     : '<div class="empty"><b>Nothing sold yet</b>Save a bill and this fills up.</div>';
 
   $('sShop').value = S.shop; $('sShopMr').value = S.shopMr; $('sPhone').value = S.phone;
-  $('sVillage').value = S.village || ''; $('sGkey').value = S.gkey || ''; $('sBillNo').value = S.billNo;
+  $('sVillage').value = S.village || ''; $('sBillNo').value = S.billNo;
 }
 
 $('bSet').onclick = ()=>{
@@ -2453,7 +2269,6 @@ $('bSet').onclick = ()=>{
   S.shopMr = $('sShopMr').value.trim() || 'अंकुश किराणा';
   S.phone = $('sPhone').value.trim();
   S.village = $('sVillage').value.trim();
-  S.gkey = $('sGkey').value.trim();
   S.billNo = Math.max(1, parseInt($('sBillNo').value) || 1);
   save(); $('hShop').textContent = S.shop; renderCart(); toast('Settings saved');
 };
