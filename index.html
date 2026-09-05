@@ -2,7 +2,19 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v6.0  (02-09-2026)
+  Version : v6.1  (05-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v6.1 - Rename a product by tapping its name.
+         * Works in Pending, Later and Main
+         * Blocks duplicate names
+         * Purchase history follows the new name, old bills keep
+           the name they were printed with
+  v6.0  (02-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -416,6 +428,8 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
 .seg.three button{font-size:12px;padding:8px 3px;letter-spacing:0}
 .lrow.pend{gap:7px}
 .lrow.pend .main b{white-space:normal;font-size:14px;line-height:1.25}
+.lrow .main b[data-ren]{text-decoration:underline dotted rgba(176,108,255,.5);
+  text-underline-offset:4px;cursor:pointer}
 .btn-ico{padding:8px 9px;font-size:14px;border-radius:9px;line-height:1}
 .btn-later{background:#221450;border:1px solid var(--line);color:var(--brass)}
 
@@ -661,7 +675,7 @@ Tea Powder 250g, 108, 125"></textarea>
     <button class="btn full btn-sm" id="bClearRates" style="margin-top:12px">Clear all sell rates</button>
     <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:8px 2px 0">
       Type a rate and tap ✓ — the product moves to Main. Tap ⏱ to park it in Later when you don't
-      know the rate yet. ✕ deletes it.
+      know the rate yet. ✕ deletes it. <b>Naam par tap karke naam badal sakte ho.</b>
     </p>
   </div>
 </section>
@@ -1067,7 +1081,7 @@ function renderProd(){
 
   box.innerHTML = list.slice(0,400).map(p=>{
     if(prodTab !== 'main'){
-      return '<div class="lrow pend"><div class="main"><b>'+esc(p.name)+'</b>' +
+      return '<div class="lrow pend"><div class="main"><b data-ren="'+esc(p.id)+'">'+esc(p.name)+'</b>' +
         (num(p.pur) ? '<small>Purchase '+money(p.pur)+'</small>' : '') + '</div>' +
         '<input class="qr num" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Rate" data-rate="'+esc(p.id)+'">' +
         '<button class="btn-gold btn-ico" data-set="'+esc(p.id)+'">✓</button>' +
@@ -1077,7 +1091,7 @@ function renderProd(){
         '<button class="btn-x btn-ico" data-del="'+esc(p.id)+'">✕</button></div>';
     }
     const m = num(p.sell) - num(p.pur);
-    return '<div class="lrow"><div class="main"><b>'+esc(p.name)+'</b><small>'+
+    return '<div class="lrow"><div class="main"><b data-ren="'+esc(p.id)+'">'+esc(p.name)+'</b><small>'+
       (p.mar ? esc(p.mar)+' • ' : '') +
       'Purchase ' + money(p.pur) + ' → Sell ' + money(p.sell) +
       (p.pur > 0 ? ' • Margin ' + money(m) : '') +
@@ -1098,6 +1112,7 @@ function renderProd(){
     $('bPAdd').textContent = 'Save changes';
     $('pName').scrollIntoView({behavior:'smooth',block:'center'});
   });
+  box.querySelectorAll('[data-ren]').forEach(el=> el.onclick = ()=> renameProd(el.dataset.ren));
   box.querySelectorAll('[data-set]').forEach(b=> b.onclick = ()=> setRate(b.dataset.set));
   box.querySelectorAll('[data-later]').forEach(b=> b.onclick = ()=>{
     const p = P.find(x=>x.id === b.dataset.later); if(!p) return;
@@ -1110,6 +1125,25 @@ function renderProd(){
   box.querySelectorAll('[data-rate]').forEach(inp=>{
     inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); setRate(inp.dataset.rate); } });
   });
+}
+
+function renameProd(id){
+  const p = P.find(x=>x.id === id);
+  if(!p) return;
+  const nn = prompt('Product ka naam badlo:', p.name);
+  if(nn === null) return;
+  const t = nn.trim();
+  if(!t){ toast('Naam khali nahi ho sakta'); return; }
+  if(t === p.name) return;
+  if(P.some(x=>x.id !== id && x.name.toLowerCase() === t.toLowerCase())){
+    toast('Ye naam pehle se list mein hai'); return;
+  }
+  const old = p.name;
+  p.name = t;
+  PU.forEach(u=> u.items.forEach(i=>{ if(i.name === old) i.name = t; }));
+  P.sort((a,b)=>a.name.localeCompare(b.name));
+  save(); renderProd(); fillDatalists();
+  toast('Naam badal gaya');
 }
 
 function setRate(id){
