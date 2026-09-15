@@ -2,7 +2,41 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v6.2  (06-09-2026)
+  Version : v7.1  (06-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v7.1 - Voice language is now per field, not one for everything.
+         * Customer name follows the chosen language — pick मराठी and
+           the name is typed in Devanagari, which then prints on the
+           Marathi WhatsApp bill
+         * Product and mobile stay on English (India) — product names
+           are stored in English, so matching works best there
+         * New mic on the product's Marathi name field (mr-IN), to
+           fill Marathi names by speaking them
+  v7.0  (06-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v7.0 - Voice input on the billing screen (mic in Name, Mobile,
+         Product). Built so a misheard word cannot reach the bill:
+         * Product voice never fills anything by itself — it shows
+           the 5 closest products from your own list and you tap one
+         * Matching uses all 5 guesses the phone returns, plus fuzzy
+           spelling, so "parley cream gold" finds PARLE KREAMS GOLD
+         * Hindi/Marathi speech is transliterated before matching,
+           so "शुगर" finds SUGAR
+         * Mobile: digits only, filled only when all 10 are heard,
+           otherwise it asks you to repeat
+         * Quantity read only from the start or end of the sentence
+         * Voice language (English / हिंदी / मराठी) in Report settings
+  v6.2  (06-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -502,6 +536,23 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
 .dchips b{display:block;font-family:var(--f-disp);font-size:21px;color:var(--dacc)}
 .dchips span{font-size:10.5px;color:var(--ddim)}
 
+/* ---------- voice ---------- */
+.micwrap{position:relative}
+.micwrap input{padding-right:52px}
+.mic{position:absolute;right:5px;bottom:5px;width:42px;height:42px;padding:0;border-radius:11px;
+  background:#221450;border:1px solid var(--line);display:grid;place-items:center}
+.mic svg{width:20px;height:20px;stroke:var(--brass);fill:none;stroke-width:1.8;stroke-linecap:round}
+.mic.on{background:linear-gradient(160deg,#8B5CF6,#6D28D9);animation:micpulse 1.1s ease-out infinite}
+.mic.on svg{stroke:#fff}
+@keyframes micpulse{0%{box-shadow:0 0 0 0 rgba(176,108,255,.55)}100%{box-shadow:0 0 0 12px rgba(176,108,255,0)}}
+.vhear{margin-top:8px;padding:9px 11px;border-radius:10px;background:#12082C;
+  border:1px solid var(--line);font-size:12.5px;color:var(--dim);line-height:1.5}
+.vhear b{color:var(--brass-lt);font-weight:600}
+.vchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.vchips button{padding:10px 12px;border-radius:11px;background:#221450;
+  border:1px solid var(--brass);color:var(--text);font-size:13.5px;font-weight:600;text-align:left}
+.vchips button small{display:block;font-weight:500;color:var(--brass);font-size:11.5px;margin-top:2px}
+
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
   background:linear-gradient(160deg,#8B5CF6,#6D28D9);color:#FFFFFF;padding:11px 18px;border-radius:11px;
@@ -559,25 +610,29 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
       <input id="staffMob" type="tel" inputmode="numeric" placeholder="Salesman ka WhatsApp number" autocomplete="off">
     </div>
     <div class="g2">
-      <div class="sugwrap">
+      <div class="sugwrap micwrap">
         <label for="cName">Name</label>
         <input id="cName" placeholder="Customer name" autocomplete="off">
+        <button class="mic" id="micName" title="Bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
         <div class="sug" id="cSug"></div>
       </div>
-      <div>
+      <div class="micwrap">
         <label for="cMob">Mobile</label>
         <input id="cMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
+        <button class="mic" id="micMob" title="Bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
       </div>
     </div>
   </div>
 
   <div class="card">
     <div class="ttl">Add item <span class="hint" id="pCount">0 products</span></div>
-    <div class="sugwrap" style="margin-bottom:8px">
+    <div class="sugwrap micwrap" style="margin-bottom:8px">
       <label for="iName">Product</label>
-      <input id="iName" placeholder="Type first letter" autocomplete="off">
+      <input id="iName" placeholder="Type ya bolo" autocomplete="off">
+      <button class="mic" id="micProd" title="Bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
       <div class="sug" id="iSug"></div>
     </div>
+    <div id="vOut"></div>
     <div id="purChip" class="purchip" style="display:none"></div>
     <div class="g3" style="margin-top:8px">
       <div>
@@ -637,9 +692,10 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
       <label for="pName">Product name</label>
       <input id="pName" placeholder="e.g. Sugar 1kg" autocomplete="off">
     </div>
-    <div style="margin-bottom:8px">
-      <label for="pMar">Marathi name <span style="text-transform:none;letter-spacing:0">— optional, used in WhatsApp bill</span></label>
+    <div class="micwrap" style="margin-bottom:8px">
+      <label for="pMar">Marathi name <span style="text-transform:none;letter-spacing:0">— WhatsApp bill mein yahi jayega</span></label>
       <input id="pMar" placeholder="उदा. साखर १ किलो" autocomplete="off">
+      <button class="mic" id="micMar" title="Marathi mein bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
     </div>
     <div class="g3">
       <div>
@@ -959,6 +1015,14 @@ Golu Patil 8459937759"></textarea>
       </div>
     </div>
     <div style="margin-bottom:10px">
+      <label>Naam bolne ki bhasha <span style="text-transform:none;letter-spacing:0">— product hamesha English</span></label>
+      <div class="seg three" id="vLangSeg">
+        <button data-l="en-IN" class="on">English</button>
+        <button data-l="hi-IN">हिंदी</button>
+        <button data-l="mr-IN">मराठी</button>
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
       <label for="sVillage">Gaon / area <span style="text-transform:none;letter-spacing:0">— poster par dikhega</span></label>
       <input id="sVillage" placeholder="उदा. ताहाराबाद">
     </div>
@@ -1021,7 +1085,7 @@ let P = DB.get('ak_products', []);
 let C = DB.get('ak_customers', []);
 let B = DB.get('ak_bills', []);
 let PU = DB.get('ak_purchases', []);
-let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
+let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किराणा', phone:'', village:'', vlang:'en-IN', billNo:1, lang:'mr' }, DB.get('ak_settings', {}));
 let cart = [];
 let editingBillId = null;
 
@@ -1358,6 +1422,7 @@ function addItem(){
   save();
   $('iName').value=''; $('iQty').value='1'; $('iRate').value='';
   showPurChip(null);
+  $('vOut').innerHTML = '';
   $('iName').focus();
   renderCart();
 }
@@ -1767,6 +1832,7 @@ $('bStaffSend').onclick = ()=>{
 $('bClear').onclick = ()=>{
   if(cart.length && !confirm('Start a new bill? Unsaved items will be cleared.')) return;
   cart = []; editingBillId = null; pendingStaff = null; showPending();
+  $('vOut').innerHTML = '';
   $('cName').value=''; $('cMob').value=''; $('tDisc').value='0';
   renderCart(); toast('New bill');
 };
@@ -1907,6 +1973,199 @@ $('bCAdd').onclick = ()=>{
   renderCust(); fillDatalists();
 };
 $('ncMob').addEventListener('keydown', e=>{ if(e.key === 'Enter') $('bCAdd').click(); });
+
+/* ---------------- voice ---------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null;
+
+const DEV = {'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'n','च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'n',
+'ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n','त':'t','थ':'th','द':'d','ध':'dh','न':'n','प':'p','फ':'ph',
+'ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'v','श':'sh','ष':'sh','स':'s','ह':'h','ळ':'l',
+'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
+'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','े':'e','ै':'ai','ो':'o','ौ':'au','ं':'n','ँ':'n','ः':'h','्':'',
+'़':'','ऑ':'o','ॉ':'o','०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9'};
+function translit(t){
+  let o = '';
+  for(const ch of String(t)) o += (DEV[ch] !== undefined ? DEV[ch] : ch);
+  return o;
+}
+const NUMW = {zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
+  shunya:0,ek:1,do:2,teen:3,tin:3,char:4,chaar:4,panch:5,paanch:5,cha:6,chah:6,chhah:6,chhe:6,
+  saat:7,sat:7,aath:8,ath:8,nau:9,das:10,dah:10};
+function digitsFrom(t){
+  const w = translit(t).toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+  let out = '';
+  w.forEach(x=>{
+    if(/^\d+$/.test(x)) out += x;
+    else if(NUMW[x] !== undefined && NUMW[x] < 10) out += NUMW[x];
+  });
+  return out;
+}
+function asNum(w){
+  if(/^\d+(\.\d+)?$/.test(w)) return parseFloat(w);
+  if(NUMW[w] !== undefined) return NUMW[w];
+  return null;
+}
+// qty only counts at the very start ("do kilo sugar") or the very end ("sugar 2"),
+// so "murli oil five litre" is not read as quantity 5
+function parseQty(t){
+  const w = translit(t).toLowerCase().replace(/[^a-z0-9.\s]/g,' ').split(/\s+/).filter(Boolean);
+  if(!w.length) return 0;
+  const first = asNum(w[0]);
+  if(first !== null && w.length > 1) return first;
+  const last = asNum(w[w.length-1]);
+  if(last !== null && w.length > 1) return last;
+  return 0;
+}
+
+function vnorm(s){
+  return translit(s).toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+}
+function lev(a,b){
+  if(Math.abs(a.length - b.length) > 3) return 99;
+  const m = a.length, n = b.length;
+  let prev = Array.from({length:n+1}, (_,j)=>j);
+  for(let i=1;i<=m;i++){
+    const cur = [i];
+    for(let j=1;j<=n;j++){
+      cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1]?0:1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function simTok(a,b){
+  if(a === b) return 1;
+  if(b.startsWith(a) || a.startsWith(b)) return 0.9;
+  if(b.includes(a) && a.length >= 3) return 0.75;
+  const d = lev(a,b);
+  if(d > 3) return 0;
+  const m = Math.max(a.length, b.length);
+  return m ? Math.max(0, 1 - d/m) : 0;
+}
+function matchProducts(alts){
+  const best = new Map();
+  alts.forEach(alt=>{
+    const q = vnorm(alt).replace(/\b(kilo|kg|gram|gm|packet|pack|piece|nag|de|do|dedo|dijiye|chahiye)\b/g,' ')
+                        .replace(/\s+/g,' ').trim();
+    const qt = q.split(' ').filter(t=>t.length > 1 && !/^\d+$/.test(t));
+    if(!qt.length) return;
+    P.forEach(p=>{
+      const nt = vnorm(p.name).split(' ').filter(Boolean);
+      if(!nt.length) return;
+      let sum = 0;
+      qt.forEach(t=>{
+        let b = 0;
+        for(const u of nt){ const v = simTok(t,u); if(v > b) b = v; if(b === 1) break; }
+        sum += b;
+      });
+      let sc = sum / qt.length;
+      if(vnorm(p.name).startsWith(q)) sc += 0.15;
+      if(num(p.sell) > 0) sc += 0.05;
+      const old = best.get(p.id);
+      if(!old || sc > old.sc) best.set(p.id, { p, sc });
+    });
+  });
+  return [...best.values()].filter(x=>x.sc >= 0.5).sort((a,b)=>b.sc - a.sc).slice(0,5);
+}
+
+function listen(btn, cb, lang){
+  if(!SR){ toast('Is browser mein voice nahi hai — Chrome use karo'); return; }
+  if(recog){ try{ recog.stop(); }catch(e){} recog = null; }
+  const r = new SR();
+  r.lang = lang || S.vlang || 'en-IN';
+  r.interimResults = false;
+  r.continuous = false;
+  r.maxAlternatives = 5;
+  recog = r;
+  btn.classList.add('on');
+  let got = false;
+  r.onresult = e=>{
+    got = true;
+    const alts = [];
+    for(let i=0;i<e.results[0].length;i++){
+      const t = (e.results[0][i].transcript || '').trim();
+      if(t) alts.push(t);
+    }
+    cb(alts);
+  };
+  r.onerror = ev=>{
+    if(ev.error === 'not-allowed') toast('Mic ki permission do');
+    else if(ev.error !== 'aborted' && ev.error !== 'no-speech') toast('Voice: ' + ev.error);
+  };
+  r.onend = ()=>{
+    btn.classList.remove('on');
+    recog = null;
+    if(!got) toast('Kuch suna nahi — dobara boliye');
+  };
+  try{ r.start(); toast('Boliye…'); }
+  catch(e){ btn.classList.remove('on'); toast('Voice start nahi hua'); }
+}
+
+$('micName').onclick = ()=> listen($('micName'), alts=>{
+  const t = alts[0] || '';
+  if(!t){ toast('Naam suna nahi'); return; }
+  $('cName').value = t.replace(/\b\w/g, c=>c.toUpperCase());
+  showCustSug();
+  toast('Suna: ' + t);
+}, S.vlang || 'en-IN');
+
+$('micMob').onclick = ()=> listen($('micMob'), alts=>{
+  let pick = '';
+  for(const a of alts){
+    const d = digitsFrom(a);
+    if(d.length >= 10){ pick = d.slice(-10); break; }
+    if(d.length > pick.length) pick = d;
+  }
+  if(pick.length === 10){
+    $('cMob').value = pick;
+    toast('Number: ' + pick);
+  } else {
+    $('vOut').innerHTML = '<div class="vhear">Suna: <b>' + esc(alts[0] || '-') +
+      '</b><br>Poore 10 digit nahi mile. Ek-ek digit karke dobara boliye.</div>';
+    toast('10 digit nahi mile');
+  }
+}, 'en-IN');
+
+$('micProd').onclick = ()=> listen($('micProd'), alts=>{
+  const heard = alts[0] || '';
+  const qty = parseQty(heard);
+  const hits = matchProducts(alts);
+  const out = $('vOut');
+  if(!hits.length){
+    out.innerHTML = '<div class="vhear">Suna: <b>' + esc(heard) +
+      '</b><br>Koi product nahi mila. Dobara boliye ya type karo.</div>';
+    return;
+  }
+  out.innerHTML = '<div class="vhear">Suna: <b>' + esc(heard) + '</b>' +
+    (qty > 0 ? ' &middot; qty <b>' + qty + '</b>' : '') + ' — sahi wala chuno:</div>' +
+    '<div class="vchips">' + hits.map((h,i)=>
+      '<button data-vp="'+i+'">' + esc(h.p.name) +
+      '<small>' + (num(h.p.sell) ? money(h.p.sell) : 'rate nahi') + '</small></button>').join('') +
+    '</div>';
+  out.querySelectorAll('[data-vp]').forEach(b=> b.onclick = ()=>{
+    const h = hits[+b.dataset.vp];
+    pickProd(h.p);
+    if(qty > 0) $('iQty').value = qty;
+    out.innerHTML = '';
+  });
+}, 'en-IN');
+
+$('micMar').onclick = ()=> listen($('micMar'), alts=>{
+  const t = alts[0] || '';
+  if(!t){ toast('Kuch suna nahi'); return; }
+  $('pMar').value = t;
+  toast('Suna: ' + t);
+}, 'mr-IN');
+
+document.querySelectorAll('#vLangSeg button').forEach(b=>{
+  b.onclick = ()=>{
+    S.vlang = b.dataset.l; save();
+    document.querySelectorAll('#vLangSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    toast('Voice bhasha: ' + b.textContent);
+  };
+});
 
 /* ---------------- purchase / suppliers ---------------- */
 let puCart = [];
@@ -2497,6 +2756,7 @@ $('hShop').textContent = S.shop;
 setLang(S.lang || 'mr');
 $('pyDate').value = isoToday();
 $('staffMob').value = S.staff || '';
+document.querySelectorAll('#vLangSeg button').forEach(b=>b.classList.toggle('on', b.dataset.l === (S.vlang||'en-IN')));
 updateStaffBtn();
 fillDatalists(); renderCart(); renderProd(); renderPu(); renderPoRows();
 window.addEventListener('beforeunload', save);
