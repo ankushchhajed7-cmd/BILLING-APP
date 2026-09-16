@@ -2,7 +2,23 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v7.1  (06-09-2026)
+  Version : v7.2  (06-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v7.2 - One-button hands-free voice billing.
+         * "Voice shuru karo" keeps listening until you say "band karo"
+         * Customer name, mobile, product, quantity, rate change,
+           remove item, send on WhatsApp — all by speaking
+         * The app speaks back, so no need to look at the screen
+         * A misheard product is never added: if two products are
+           close it reads out "1 ..., 2 ..." and waits for a number
+         * If the product has no sell rate it asks "Rate boliye"
+         * Per-field mics from v7.0/v7.1 removed
+  v7.1  (06-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -603,6 +619,24 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
     </div>
   </div>
 
+  <div class="card" id="vCard">
+    <div class="ttl">Voice billing <span class="hint">bina type kiye</span></div>
+    <button class="btn-gold full" id="vStart">🎤 Voice shuru karo</button>
+    <div id="vPanel" style="display:none">
+      <div class="vhear" id="vHeard">Boliye…</div>
+      <div id="vOut"></div>
+      <p style="color:var(--dim);font-size:12px;line-height:1.7;margin:10px 2px 0">
+        <b style="color:var(--brass-lt)">Customer Ravi Kamaver</b> — naam<br>
+        <b style="color:var(--brass-lt)">Number 9371959593</b> — mobile<br>
+        <b style="color:var(--brass-lt)">Do kilo sugar</b> — item + qty<br>
+        <b style="color:var(--brass-lt)">Rate 45</b> — aakhri item ka rate badlo<br>
+        <b style="color:var(--brass-lt)">Hatao</b> — aakhri item nikalo<br>
+        <b style="color:var(--brass-lt)">Bhejo</b> — WhatsApp par bhejo<br>
+        <b style="color:var(--brass-lt)">Band karo</b> — voice band
+      </p>
+    </div>
+  </div>
+
   <div class="card">
     <div class="ttl">Customer <span class="hint">saves automatically</span></div>
     <div style="margin-bottom:10px">
@@ -610,29 +644,25 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
       <input id="staffMob" type="tel" inputmode="numeric" placeholder="Salesman ka WhatsApp number" autocomplete="off">
     </div>
     <div class="g2">
-      <div class="sugwrap micwrap">
+      <div class="sugwrap">
         <label for="cName">Name</label>
         <input id="cName" placeholder="Customer name" autocomplete="off">
-        <button class="mic" id="micName" title="Bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
         <div class="sug" id="cSug"></div>
       </div>
-      <div class="micwrap">
+      <div>
         <label for="cMob">Mobile</label>
         <input id="cMob" type="tel" inputmode="numeric" placeholder="10 digit number" autocomplete="off">
-        <button class="mic" id="micMob" title="Bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
       </div>
     </div>
   </div>
 
   <div class="card">
     <div class="ttl">Add item <span class="hint" id="pCount">0 products</span></div>
-    <div class="sugwrap micwrap" style="margin-bottom:8px">
+    <div class="sugwrap" style="margin-bottom:8px">
       <label for="iName">Product</label>
       <input id="iName" placeholder="Type ya bolo" autocomplete="off">
-      <button class="mic" id="micProd" title="Bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
       <div class="sug" id="iSug"></div>
     </div>
-    <div id="vOut"></div>
     <div id="purChip" class="purchip" style="display:none"></div>
     <div class="g3" style="margin-top:8px">
       <div>
@@ -1422,7 +1452,6 @@ function addItem(){
   save();
   $('iName').value=''; $('iQty').value='1'; $('iRate').value='';
   showPurChip(null);
-  $('vOut').innerHTML = '';
   $('iName').focus();
   renderCart();
 }
@@ -1832,7 +1861,7 @@ $('bStaffSend').onclick = ()=>{
 $('bClear').onclick = ()=>{
   if(cart.length && !confirm('Start a new bill? Unsaved items will be cleared.')) return;
   cart = []; editingBillId = null; pendingStaff = null; showPending();
-  $('vOut').innerHTML = '';
+  $('vOut').innerHTML = ''; vPend = null; vAwaitRate = null;
   $('cName').value=''; $('cMob').value=''; $('tDisc').value='0';
   renderCart(); toast('New bill');
 };
@@ -2102,54 +2131,201 @@ function listen(btn, cb, lang){
   catch(e){ btn.classList.remove('on'); toast('Voice start nahi hua'); }
 }
 
-$('micName').onclick = ()=> listen($('micName'), alts=>{
-  const t = alts[0] || '';
-  if(!t){ toast('Naam suna nahi'); return; }
-  $('cName').value = t.replace(/\b\w/g, c=>c.toUpperCase());
-  showCustSug();
-  toast('Suna: ' + t);
-}, S.vlang || 'en-IN');
+/* ---------------- one-button voice billing ---------------- */
+let vOn = false, vBusy = false, vRecog = null;
+let vPend = null, vPendQty = 0, vAwaitRate = null;
 
-$('micMob').onclick = ()=> listen($('micMob'), alts=>{
-  let pick = '';
-  for(const a of alts){
-    const d = digitsFrom(a);
-    if(d.length >= 10){ pick = d.slice(-10); break; }
-    if(d.length > pick.length) pick = d;
-  }
-  if(pick.length === 10){
-    $('cMob').value = pick;
-    toast('Number: ' + pick);
-  } else {
-    $('vOut').innerHTML = '<div class="vhear">Suna: <b>' + esc(alts[0] || '-') +
-      '</b><br>Poore 10 digit nahi mile. Ek-ek digit karke dobara boliye.</div>';
-    toast('10 digit nahi mile');
-  }
-}, 'en-IN');
+function vSay(t){
+  $('vHeard').innerHTML = t;
+}
+function speak(txt){
+  if(!('speechSynthesis' in window)){ return; }
+  try{
+    vBusy = true;
+    if(vRecog){ try{ vRecog.abort(); }catch(e){} vRecog = null; }
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = S.vlang || 'en-IN';
+    u.rate = 1.05;
+    u.onend = u.onerror = ()=>{ vBusy = false; if(vOn) setTimeout(vListen, 180); };
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    setTimeout(()=>{ if(vBusy){ vBusy = false; if(vOn) vListen(); } }, 6000);
+  }catch(e){ vBusy = false; }
+}
 
-$('micProd').onclick = ()=> listen($('micProd'), alts=>{
-  const heard = alts[0] || '';
-  const qty = parseQty(heard);
-  const hits = matchProducts(alts);
-  const out = $('vOut');
-  if(!hits.length){
-    out.innerHTML = '<div class="vhear">Suna: <b>' + esc(heard) +
-      '</b><br>Koi product nahi mila. Dobara boliye ya type karo.</div>';
+function vListen(){
+  if(!vOn || vBusy || vRecog || !SR) return;
+  const r = new SR();
+  r.lang = S.vlang || 'en-IN';
+  r.interimResults = false;
+  r.continuous = false;
+  r.maxAlternatives = 5;
+  vRecog = r;
+  r.onresult = e=>{
+    const alts = [];
+    for(let i=0;i<e.results[0].length;i++){
+      const t = (e.results[0][i].transcript || '').trim();
+      if(t) alts.push(t);
+    }
+    if(alts.length) vHandle(alts);
+  };
+  r.onerror = ev=>{
+    if(ev.error === 'not-allowed'){ toast('Mic ki permission do'); vStop(); }
+  };
+  r.onend = ()=>{ vRecog = null; if(vOn && !vBusy) setTimeout(vListen, 250); };
+  try{ r.start(); }catch(e){ vRecog = null; }
+}
+
+function vStart(){
+  if(!SR){ toast('Is browser mein voice nahi hai — Chrome use karo'); return; }
+  vOn = true; vPend = null; vAwaitRate = null;
+  $('vStart').textContent = '⏹ Voice band karo';
+  $('vStart').className = 'btn full';
+  $('vPanel').style.display = 'block';
+  vSay('Sun raha hoon…');
+  speak('Boliye');
+}
+function vStop(){
+  vOn = false; vPend = null; vAwaitRate = null;
+  if(vRecog){ try{ vRecog.abort(); }catch(e){} vRecog = null; }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  $('vStart').textContent = '🎤 Voice shuru karo';
+  $('vStart').className = 'btn-gold full';
+  $('vPanel').style.display = 'none';
+  $('vOut').innerHTML = '';
+}
+$('vStart').onclick = ()=> vOn ? vStop() : vStart();
+
+function vIndex(q, max){
+  const d = digitsFrom(q);
+  if(d){ const n = parseInt(d[0], 10); if(n >= 1 && n <= max) return n - 1; }
+  if(/\b(pehla|pahila|first|pahile)\b/.test(q)) return 0;
+  if(/\b(dusra|dusre|second|dusara)\b/.test(q)) return 1;
+  if(/\b(tisra|third|tisre)\b/.test(q)) return 2;
+  return null;
+}
+
+function vAdd(p, qty, rate){
+  $('iName').value = p.name;
+  $('iQty').value = qty > 0 ? qty : 1;
+  $('iRate').value = rate > 0 ? rate : (num(p.sell) || '');
+  addItem();
+  $('vOut').innerHTML = '';
+  vPend = null; vAwaitRate = null;
+  const last = cart[cart.length - 1];
+  if(last) speak(last.name + ', ' + (Math.round(last.qty*100)/100) + ' nag, ' + Math.round(last.qty*last.rate) + ' rupaye');
+}
+
+function vOptions(hits, qty){
+  vPend = hits; vPendQty = qty;
+  $('vOut').innerHTML = '<div class="vchips">' + hits.map((h,i)=>
+    '<button data-vp="'+i+'">' + (i+1) + '. ' + esc(h.p.name) +
+    '<small>' + (num(h.p.sell) ? money(h.p.sell) : 'rate nahi') + '</small></button>').join('') + '</div>';
+  $('vOut').querySelectorAll('[data-vp]').forEach(b=> b.onclick = ()=>{
+    const h = vPend[+b.dataset.vp];
+    if(num(h.p.sell) > 0) vAdd(h.p, vPendQty, 0);
+    else { vAwaitRate = { p:h.p, qty:vPendQty }; vPend = null; speak('Rate boliye'); }
+  });
+  speak(hits.slice(0,3).map((h,i)=> (i+1) + '. ' + h.p.name).join(', ') + '. Number boliye.');
+}
+
+function vHandle(alts){
+  const raw = alts[0] || '';
+  const q = vnorm(raw);
+  $('vHeard').innerHTML = 'Suna: <b>' + esc(raw) + '</b>';
+  if(!q) return;
+
+  if(/\b(band|stop|bas|khatam|bandh)\b/.test(q)){ speak('Band'); setTimeout(vStop, 900); return; }
+
+  // waiting for a rate
+  if(vAwaitRate){
+    const v = parseFloat(digitsFrom(raw) || '0');
+    if(v > 0){ vAdd(vAwaitRate.p, vAwaitRate.qty, v); return; }
+    speak('Rate boliye'); return;
+  }
+
+  // choosing between matches
+  if(vPend){
+    const i = vIndex(q, vPend.length);
+    if(i !== null && vPend[i]){
+      const p = vPend[i].p;
+      if(num(p.sell) > 0) vAdd(p, vPendQty, 0);
+      else { vAwaitRate = { p, qty:vPendQty }; vPend = null; speak('Rate boliye'); }
+      return;
+    }
+    if(/\b(nahi|no|cancel|rehne|chhodo)\b/.test(q)){
+      vPend = null; $('vOut').innerHTML = ''; speak('Theek'); return;
+    }
+  }
+
+  // customer name
+  let m = raw.match(/^\s*(customer|grahak|ग्राहक|ग्राहका|naam|name|नाव|नाम)\s+(.+)$/i);
+  if(m){
+    $('cName').value = m[2].trim();
+    saveCustomer(); save(); fillDatalists();
+    speak('Customer ' + m[2].trim());
     return;
   }
-  out.innerHTML = '<div class="vhear">Suna: <b>' + esc(heard) + '</b>' +
-    (qty > 0 ? ' &middot; qty <b>' + qty + '</b>' : '') + ' — sahi wala chuno:</div>' +
-    '<div class="vchips">' + hits.map((h,i)=>
-      '<button data-vp="'+i+'">' + esc(h.p.name) +
-      '<small>' + (num(h.p.sell) ? money(h.p.sell) : 'rate nahi') + '</small></button>').join('') +
-    '</div>';
-  out.querySelectorAll('[data-vp]').forEach(b=> b.onclick = ()=>{
-    const h = hits[+b.dataset.vp];
-    pickProd(h.p);
-    if(qty > 0) $('iQty').value = qty;
-    out.innerHTML = '';
-  });
-}, 'en-IN');
+
+  // mobile number
+  if(/\b(number|nambar|mobile|mobail|फोन|नंबर)\b/.test(q) || /^\d[\d\s]{8,}$/.test(raw.trim())){
+    const d = digitsFrom(raw);
+    if(d.length >= 10){
+      $('cMob').value = d.slice(-10);
+      saveCustomer(); save(); fillDatalists();
+      speak('Number ' + d.slice(-10).split('').join(' '));
+    } else speak('Poora number dobara boliye');
+    return;
+  }
+
+  // change the rate of the last item
+  m = q.match(/\b(rate|bhav|dar|daam|price|भाव|दर)\b\s*(.*)$/);
+  if(m){
+    const v = parseFloat(digitsFrom(m[2]) || '0');
+    if(v > 0 && cart.length){
+      cart[cart.length-1].rate = v;
+      renderCart();
+      speak(cart[cart.length-1].name + ' ka rate ' + v);
+    } else if(v > 0){
+      $('iRate').value = v; speak('Rate ' + v);
+    } else speak('Rate boliye');
+    return;
+  }
+
+  // remove the last item
+  if(/\b(hatao|hata|hatav|delete|remove|nikalo|nikal|कमी|काढ)\b/.test(q)){
+    if(cart.length){
+      const g = cart.pop(); renderCart();
+      speak(g.name + ' hataya');
+    } else speak('Bill khali hai');
+    return;
+  }
+
+  // send
+  if(/\b(bhejo|bhej|send|pathva|pathvaa|whatsapp|भेजो|पाठवा)\b/.test(q)){
+    if(!cart.length){ speak('Bill khali hai'); return; }
+    speak('Bhej raha hoon');
+    setTimeout(()=> $('bWAtext').click(), 700);
+    return;
+  }
+
+  // new bill
+  if(/\b(naya bill|new bill|next bill|नया|नवीन)\b/.test(q)){
+    $('bClear').click(); speak('Naya bill'); return;
+  }
+
+  // otherwise: a product
+  const qty = parseQty(raw);
+  const hits = matchProducts(alts);
+  if(!hits.length){ speak('Nahi mila, dobara boliye'); return; }
+  const top = hits[0], second = hits[1];
+  if(top.sc >= 0.9 && (!second || top.sc - second.sc >= 0.15)){
+    if(num(top.p.sell) > 0) vAdd(top.p, qty, 0);
+    else { vAwaitRate = { p:top.p, qty }; speak(top.p.name + '. Rate boliye'); }
+    return;
+  }
+  vOptions(hits, qty);
+}
 
 $('micMar').onclick = ()=> listen($('micMar'), alts=>{
   const t = alts[0] || '';
