@@ -2,7 +2,21 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v7.2  (06-09-2026)
+  Version : v7.3  (16-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v7.3 - Spoken customer name is looked up in the saved list first.
+         * A match fills the saved name AND its mobile number
+         * Several close names are read out "1 ..., 2 ..." to pick
+         * Only a genuinely new name is treated as a new customer,
+           and then it asks for the number
+         * Spelling tolerance widened, so "Ravi Kumawat" now finds
+           the saved "RAVI KAMAVER"
+  v7.2  (06-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -2051,7 +2065,7 @@ function vnorm(s){
   return translit(s).toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
 }
 function lev(a,b){
-  if(Math.abs(a.length - b.length) > 3) return 99;
+  if(Math.abs(a.length - b.length) > 4) return 99;
   const m = a.length, n = b.length;
   let prev = Array.from({length:n+1}, (_,j)=>j);
   for(let i=1;i<=m;i++){
@@ -2067,9 +2081,9 @@ function simTok(a,b){
   if(a === b) return 1;
   if(b.startsWith(a) || a.startsWith(b)) return 0.9;
   if(b.includes(a) && a.length >= 3) return 0.75;
-  const d = lev(a,b);
-  if(d > 3) return 0;
   const m = Math.max(a.length, b.length);
+  const d = lev(a,b);
+  if(d > Math.max(3, Math.ceil(m * 0.5))) return 0;
   return m ? Math.max(0, 1 - d/m) : 0;
 }
 function matchProducts(alts){
@@ -2096,6 +2110,30 @@ function matchProducts(alts){
     });
   });
   return [...best.values()].filter(x=>x.sc >= 0.5).sort((a,b)=>b.sc - a.sc).slice(0,5);
+}
+
+function matchCustomers(alts){
+  const best = new Map();
+  alts.forEach(alt=>{
+    const q = vnorm(alt).replace(/^(customer|grahak|naam|name|nav)\s+/,'').trim();
+    const qt = q.split(' ').filter(t=>t.length > 1);
+    if(!qt.length) return;
+    C.forEach(c=>{
+      const nt = vnorm(c.name).split(' ').filter(Boolean);
+      if(!nt.length) return;
+      let sum = 0;
+      qt.forEach(t=>{
+        let b = 0;
+        for(const u of nt){ const v = simTok(t,u); if(v > b) b = v; if(b === 1) break; }
+        sum += b;
+      });
+      let sc = sum / qt.length;
+      if(vnorm(c.name).startsWith(q)) sc += 0.15;
+      const old = best.get(c.id);
+      if(!old || sc > old.sc) best.set(c.id, { c, sc });
+    });
+  });
+  return [...best.values()].filter(x=>x.sc >= 0.45).sort((a,b)=>b.sc - a.sc).slice(0,4);
 }
 
 function listen(btn, cb, lang){
@@ -2133,7 +2171,7 @@ function listen(btn, cb, lang){
 
 /* ---------------- one-button voice billing ---------------- */
 let vOn = false, vBusy = false, vRecog = null;
-let vPend = null, vPendQty = 0, vAwaitRate = null;
+let vPend = null, vPendQty = 0, vPendType = 'prod', vAwaitRate = null;
 
 function vSay(t){
   $('vHeard').innerHTML = t;
@@ -2216,8 +2254,24 @@ function vAdd(p, qty, rate){
   if(last) speak(last.name + ', ' + (Math.round(last.qty*100)/100) + ' nag, ' + Math.round(last.qty*last.rate) + ' rupaye');
 }
 
+function vUseCust(c){
+  $('cName').value = c.name;
+  if(c.mobile) $('cMob').value = c.mobile;
+  vPend = null; $('vOut').innerHTML = '';
+  speak(c.mobile ? c.name + ', ' + c.mobile.split('').join(' ') : c.name + '. Number boliye');
+}
+
+function vCustOptions(hits){
+  vPend = hits; vPendType = 'cust';
+  $('vOut').innerHTML = '<div class="vchips">' + hits.map((h,i)=>
+    '<button data-vc="'+i+'">' + (i+1) + '. ' + esc(h.c.name) +
+    '<small>' + (h.c.mobile || 'number nahi') + '</small></button>').join('') + '</div>';
+  $('vOut').querySelectorAll('[data-vc]').forEach(b=> b.onclick = ()=> vUseCust(vPend[+b.dataset.vc].c));
+  speak(hits.slice(0,3).map((h,i)=> (i+1) + '. ' + h.c.name).join(', ') + '. Number boliye.');
+}
+
 function vOptions(hits, qty){
-  vPend = hits; vPendQty = qty;
+  vPend = hits; vPendQty = qty; vPendType = 'prod';
   $('vOut').innerHTML = '<div class="vchips">' + hits.map((h,i)=>
     '<button data-vp="'+i+'">' + (i+1) + '. ' + esc(h.p.name) +
     '<small>' + (num(h.p.sell) ? money(h.p.sell) : 'rate nahi') + '</small></button>').join('') + '</div>';
@@ -2248,6 +2302,7 @@ function vHandle(alts){
   if(vPend){
     const i = vIndex(q, vPend.length);
     if(i !== null && vPend[i]){
+      if(vPendType === 'cust'){ vUseCust(vPend[i].c); return; }
       const p = vPend[i].p;
       if(num(p.sell) > 0) vAdd(p, vPendQty, 0);
       else { vAwaitRate = { p, qty:vPendQty }; vPend = null; speak('Rate boliye'); }
@@ -2261,9 +2316,17 @@ function vHandle(alts){
   // customer name
   let m = raw.match(/^\s*(customer|grahak|ग्राहक|ग्राहका|naam|name|नाव|नाम)\s+(.+)$/i);
   if(m){
-    $('cName').value = m[2].trim();
-    saveCustomer(); save(); fillDatalists();
-    speak('Customer ' + m[2].trim());
+    const spoken = m[2].trim();
+    const cand = matchCustomers(alts);
+    if(cand.length && cand[0].sc >= 0.75 && (!cand[1] || cand[0].sc - cand[1].sc >= 0.15)){
+      vUseCust(cand[0].c);
+    } else if(cand.length){
+      $('cName').value = spoken;
+      vCustOptions(cand);
+    } else {
+      $('cName').value = spoken;
+      speak('Naya customer ' + spoken + '. Number boliye');
+    }
     return;
   }
 
