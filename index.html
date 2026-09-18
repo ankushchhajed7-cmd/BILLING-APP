@@ -2,7 +2,22 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v7.4  (17-09-2026)
+  Version : v7.5  (17-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v7.5 - Never lose the work again, and refill rates faster.
+         * Red backup reminder on the billing screen when the last
+           backup is a day old; one tap saves the file
+         * "Rate bolke bharo" in Products: the app reads each pending
+           product, you say the number, it saves and moves on.
+           Say "chhodo" to skip, "later" to park, "band karo" to stop
+         * Typing a rate and tapping the tick now jumps to the next
+           pending row, so the whole list can be done without scrolling
+  v7.4  (17-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -649,6 +664,14 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(176,108,255,.55))}
     </div>
   </div>
 
+  <div class="card" id="bkCard" style="display:none;border-color:#E2705A">
+    <div class="ttl" style="color:#E2705A">Backup</div>
+    <p id="bkMsg" style="font-size:13.5px;line-height:1.55;margin:0 2px 10px">
+      Aaj ka backup nahi liya.
+    </p>
+    <button class="btn-gold full" id="bkNow">Abhi backup lo</button>
+  </div>
+
   <div class="card" id="vCard">
     <div class="ttl">Voice billing <span class="hint">bina type kiye</span></div>
     <button class="btn-gold full" id="vStart">🎤 Voice shuru karo</button>
@@ -796,6 +819,8 @@ Tea Powder 250g, 108, 125"></textarea>
       <button id="tabMain">Main <b id="nMain">0</b></button>
     </div>
     <input id="pSearch" placeholder="Search product" autocomplete="off" style="margin-bottom:10px">
+    <button class="btn-gold full" id="bRateVoice" style="margin-bottom:10px">🎤 Rate bolke bharo</button>
+    <div id="rNow" class="vhear" style="display:none"></div>
     <div id="prodList"></div>
     <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:12px 2px 0">
       Type a rate and tap ✓ — the product moves to Main. Tap ⏱ to park it in Later when you don't
@@ -1098,7 +1123,7 @@ Golu Patil 8459937759"></textarea>
       <b>Add to Home screen</b>. On iPhone use Share → Add to Home Screen.
     </p>
     <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0">
-      App version <b>v7.4</b>. All data stays on this phone. Take a backup every few days and keep the file in Drive — clearing
+      App version <b>v7.5</b>. All data stays on this phone. Take a backup every few days and keep the file in Drive — clearing
       browser data will erase everything.
     </p>
   </div>
@@ -1284,9 +1309,14 @@ function setRate(id){
   if(!p || !inp) return;
   const r = num(inp.value);
   if(r <= 0){ toast('Enter a sell rate first'); inp.focus(); return; }
+  const rows = [...$('prodList').querySelectorAll('[data-rate]')];
+  const at = rows.indexOf(inp);
   p.sell = r; p.later = false;
   save(); renderProd(); fillDatalists();
   toast(p.name + ' → Main');
+  // keep going: the next pending item slides into the same spot
+  const next = $('prodList').querySelectorAll('[data-rate]')[at];
+  if(next){ next.focus(); next.scrollIntoView({block:'center'}); }
 }
 
 function setTab(t){
@@ -2185,6 +2215,108 @@ function listen(btn, cb, lang){
   catch(e){ btn.classList.remove('on'); toast('Voice start nahi hua'); }
 }
 
+/* ---------------- daily backup reminder ---------------- */
+function bkCheck(){
+  const last = DB.get('ak_lastbk', 0);
+  const days = last ? Math.floor((Date.now() - last) / 86400000) : 99;
+  const card = $('bkCard');
+  if(!P.length && !B.length){ card.style.display = 'none'; return; }
+  if(days >= 1){
+    card.style.display = 'block';
+    $('bkMsg').textContent = last
+      ? 'Aakhri backup ' + days + ' din pehle liya tha. Data browser mein hai — ek backup abhi le lo.'
+      : 'Abhi tak koi backup nahi liya. Data browser mein hai — ek backup abhi le lo.';
+  } else card.style.display = 'none';
+}
+$('bkNow').onclick = ()=>{ $('bExport').click(); };
+
+/* ---------------- voice rate entry (products) ---------------- */
+let rOn = false, rBusy = false, rRec = null, rList = [], rIx = 0;
+
+function rSpeak(txt){
+  if(!('speechSynthesis' in window)){ rBusy = false; if(rOn) rListen(); return; }
+  try{
+    rBusy = true;
+    if(rRec){ try{ rRec.abort(); }catch(e){} rRec = null; }
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = 'en-IN'; u.rate = 1.1;
+    u.onend = u.onerror = ()=>{ rBusy = false; if(rOn) setTimeout(rListen, 150); };
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+    setTimeout(()=>{ if(rBusy){ rBusy = false; if(rOn) rListen(); } }, 7000);
+  }catch(e){ rBusy = false; }
+}
+function rListen(){
+  if(!rOn || rBusy || rRec || !SR) return;
+  const r = new SR();
+  r.lang = 'en-IN'; r.interimResults = false; r.continuous = false; r.maxAlternatives = 5;
+  rRec = r;
+  r.onresult = e=>{
+    const alts = [];
+    for(let i=0;i<e.results[0].length;i++){
+      const t = (e.results[0][i].transcript || '').trim();
+      if(t) alts.push(t);
+    }
+    if(alts.length) rHandle(alts);
+  };
+  r.onerror = ev=>{ if(ev.error === 'not-allowed'){ toast('Mic ki permission do'); rStop(); } };
+  r.onend = ()=>{ rRec = null; if(rOn && !rBusy) setTimeout(rListen, 200); };
+  try{ r.start(); }catch(e){ rRec = null; }
+}
+function rShow(html){ $('rNow').style.display = 'block'; $('rNow').innerHTML = html; }
+
+function rStart(){
+  if(!SR){ toast('Is browser mein voice nahi hai — Chrome use karo'); return; }
+  rList = P.filter(p=> !num(p.sell) && !p.later);
+  if(!rList.length){ toast('Pending mein koi item nahi'); return; }
+  rOn = true; rIx = 0;
+  $('bRateVoice').textContent = '⏹ Rate bolna band';
+  $('bRateVoice').className = 'btn full';
+  rSpeak(rList.length + ' item baaki. Shuru. ' + rList[0].name + '. Rate?');
+  rShow('<b>' + esc(rList[0].name) + '</b> — rate boliye  <span style="float:right">1 / ' + rList.length + '</span>');
+}
+function rStop(){
+  rOn = false;
+  if(rRec){ try{ rRec.abort(); }catch(e){} rRec = null; }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  $('bRateVoice').textContent = '🎤 Rate bolke bharo';
+  $('bRateVoice').className = 'btn-gold full';
+  $('rNow').style.display = 'none';
+  renderProd();
+}
+$('bRateVoice').onclick = ()=> rOn ? rStop() : rStart();
+
+function rNext(){
+  rIx++;
+  while(rIx < rList.length && (num(rList[rIx].sell) > 0 || rList[rIx].later)) rIx++;
+  if(rIx >= rList.length){
+    rShow('<b>Ho gaya</b> — pending list khatam');
+    rSpeak('Sab ho gaya'); setTimeout(rStop, 1800); return;
+  }
+  const p = rList[rIx];
+  rShow('<b>' + esc(p.name) + '</b> — rate boliye  <span style="float:right">' +
+        (rIx+1) + ' / ' + rList.length + '</span>');
+  rSpeak(p.name + '. Rate?');
+}
+function rHandle(alts){
+  const raw = alts[0] || '', q = vnorm(raw);
+  if(/\b(band|bandh|stop|bas|khatam)\b/.test(q)){ rSpeak('Band'); setTimeout(rStop, 900); return; }
+  const p = rList[rIx];
+  if(!p){ rStop(); return; }
+  if(/\b(chhodo|chodo|skip|aage|next|pudhe)\b/.test(q)){ rNext(); return; }
+  if(/\b(later|baad|nantar)\b/.test(q)){ p.later = true; save(); rNext(); return; }
+  if(/\b(hatao|delete|nikalo|nahi chahiye)\b/.test(q)){
+    P = P.filter(x=>x.id !== p.id); save(); fillDatalists(); rSpeak('Delete'); setTimeout(rNext, 500); return;
+  }
+  let v = 0;
+  for(const a of alts){ v = vNum(a); if(v > 0) break; }
+  if(v > 0){
+    p.sell = v; p.later = false;
+    save(); fillDatalists();
+    rSpeak(String(v));
+    setTimeout(rNext, 400);
+  } else rSpeak('Rate boliye');
+}
+
 /* ---------------- one-button voice billing ---------------- */
 let vOn = false, vBusy = false, vRecog = null;
 let vState = 'idle';          // idle | pick | custpick | qty | rate
@@ -2999,7 +3131,9 @@ $('bExport').onclick = ()=>{
   a.href = URL.createObjectURL(blob);
   a.download = 'ankush-kirana-backup-' + dkey(Date.now()) + '.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-  toast('Backup file downloaded');
+  DB.set('ak_lastbk', Date.now());
+  bkCheck();
+  toast('Backup ho gaya — file Downloads mein hai');
 };
 $('bImport').onclick = ()=> $('fImport').click();
 $('fImport').onchange = e=>{
@@ -3024,6 +3158,7 @@ $('fImport').onchange = e=>{
 $('hShop').textContent = S.shop;
 setLang(S.lang || 'mr');
 $('pyDate').value = isoToday();
+bkCheck();
 $('staffMob').value = S.staff || '';
 document.querySelectorAll('#vLangSeg button').forEach(b=>b.classList.toggle('on', b.dataset.l === (S.vlang||'en-IN')));
 updateStaffBtn();
