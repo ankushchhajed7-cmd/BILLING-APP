@@ -2,7 +2,23 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v7.3  (16-09-2026)
+  Version : v7.4  (17-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v7.4 - Voice billing reworked into a proper step-by-step flow.
+         * Say the product -> app reads back its name and saved rate,
+           then asks "Kitne nag?" -> say the number -> item added
+         * Saved rate is used as is; it only asks for a rate when the
+           product has none, and that rate is saved to the product
+         * After each item it says "Agla item boliye" and is ready
+         * Customer name now fills the saved mobile number too
+         * Keyboard no longer pops up over the screen in voice mode
+         * Version shown in Report settings, to confirm the live build
+  v7.3  (16-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -1082,7 +1098,7 @@ Golu Patil 8459937759"></textarea>
       <b>Add to Home screen</b>. On iPhone use Share → Add to Home Screen.
     </p>
     <p style="color:var(--dim);font-size:12px;line-height:1.55;margin:10px 2px 0">
-      All data stays on this phone. Take a backup every few days and keep the file in Drive — clearing
+      App version <b>v7.4</b>. All data stays on this phone. Take a backup every few days and keep the file in Drive — clearing
       browser data will erase everything.
     </p>
   </div>
@@ -1466,7 +1482,7 @@ function addItem(){
   save();
   $('iName').value=''; $('iQty').value='1'; $('iRate').value='';
   showPurChip(null);
-  $('iName').focus();
+  if(!vOn) $('iName').focus();
   renderCart();
 }
 
@@ -2171,23 +2187,24 @@ function listen(btn, cb, lang){
 
 /* ---------------- one-button voice billing ---------------- */
 let vOn = false, vBusy = false, vRecog = null;
-let vPend = null, vPendQty = 0, vPendType = 'prod', vAwaitRate = null;
+let vState = 'idle';          // idle | pick | custpick | qty | rate
+let vList = null, vProd = null, vQty = 0;
 
-function vSay(t){
-  $('vHeard').innerHTML = t;
-}
+function vShow(html){ $('vHeard').innerHTML = html; }
+function vReset(){ vState = 'idle'; vList = null; vProd = null; vQty = 0; $('vOut').innerHTML = ''; }
+
 function speak(txt){
-  if(!('speechSynthesis' in window)){ return; }
+  if(!('speechSynthesis' in window)) return;
   try{
     vBusy = true;
     if(vRecog){ try{ vRecog.abort(); }catch(e){} vRecog = null; }
     const u = new SpeechSynthesisUtterance(txt);
     u.lang = S.vlang || 'en-IN';
     u.rate = 1.05;
-    u.onend = u.onerror = ()=>{ vBusy = false; if(vOn) setTimeout(vListen, 180); };
+    u.onend = u.onerror = ()=>{ vBusy = false; if(vOn) setTimeout(vListen, 150); };
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
-    setTimeout(()=>{ if(vBusy){ vBusy = false; if(vOn) vListen(); } }, 6000);
+    setTimeout(()=>{ if(vBusy){ vBusy = false; if(vOn) vListen(); } }, 7000);
   }catch(e){ vBusy = false; }
 }
 
@@ -2207,187 +2224,200 @@ function vListen(){
     }
     if(alts.length) vHandle(alts);
   };
-  r.onerror = ev=>{
-    if(ev.error === 'not-allowed'){ toast('Mic ki permission do'); vStop(); }
-  };
-  r.onend = ()=>{ vRecog = null; if(vOn && !vBusy) setTimeout(vListen, 250); };
+  r.onerror = ev=>{ if(ev.error === 'not-allowed'){ toast('Mic ki permission do'); vStop(); } };
+  r.onend = ()=>{ vRecog = null; if(vOn && !vBusy) setTimeout(vListen, 220); };
   try{ r.start(); }catch(e){ vRecog = null; }
 }
 
 function vStart(){
   if(!SR){ toast('Is browser mein voice nahi hai — Chrome use karo'); return; }
-  vOn = true; vPend = null; vAwaitRate = null;
+  vOn = true; vReset();
   $('vStart').textContent = '⏹ Voice band karo';
   $('vStart').className = 'btn full';
   $('vPanel').style.display = 'block';
-  vSay('Sun raha hoon…');
+  vShow('Sun raha hoon…');
   speak('Boliye');
 }
 function vStop(){
-  vOn = false; vPend = null; vAwaitRate = null;
+  vOn = false; vReset();
   if(vRecog){ try{ vRecog.abort(); }catch(e){} vRecog = null; }
   try{ speechSynthesis.cancel(); }catch(e){}
   $('vStart').textContent = '🎤 Voice shuru karo';
   $('vStart').className = 'btn-gold full';
   $('vPanel').style.display = 'none';
-  $('vOut').innerHTML = '';
 }
 $('vStart').onclick = ()=> vOn ? vStop() : vStart();
 
 function vIndex(q, max){
   const d = digitsFrom(q);
   if(d){ const n = parseInt(d[0], 10); if(n >= 1 && n <= max) return n - 1; }
-  if(/\b(pehla|pahila|first|pahile)\b/.test(q)) return 0;
-  if(/\b(dusra|dusre|second|dusara)\b/.test(q)) return 1;
-  if(/\b(tisra|third|tisre)\b/.test(q)) return 2;
+  if(/\b(pehla|pahila|pahile|first)\b/.test(q)) return 0;
+  if(/\b(dusra|dusre|dusara|second)\b/.test(q)) return 1;
+  if(/\b(tisra|tisre|third)\b/.test(q)) return 2;
   return null;
 }
-
-function vAdd(p, qty, rate){
-  $('iName').value = p.name;
-  $('iQty').value = qty > 0 ? qty : 1;
-  $('iRate').value = rate > 0 ? rate : (num(p.sell) || '');
-  addItem();
-  $('vOut').innerHTML = '';
-  vPend = null; vAwaitRate = null;
-  const last = cart[cart.length - 1];
-  if(last) speak(last.name + ', ' + (Math.round(last.qty*100)/100) + ' nag, ' + Math.round(last.qty*last.rate) + ' rupaye');
+function vNum(raw){
+  const d = digitsFrom(raw);
+  if(d) return parseFloat(d);
+  const w = vnorm(raw).split(' ');
+  for(const t of w){ if(NUMW[t] !== undefined) return NUMW[t]; }
+  return 0;
 }
 
+/* ---- customer ---- */
 function vUseCust(c){
   $('cName').value = c.name;
-  if(c.mobile) $('cMob').value = c.mobile;
-  vPend = null; $('vOut').innerHTML = '';
-  speak(c.mobile ? c.name + ', ' + c.mobile.split('').join(' ') : c.name + '. Number boliye');
+  $('cMob').value = c.mobile || '';
+  vReset();
+  if(c.mobile) speak(c.name + '. Number ' + c.mobile.split('').join(' ') + '. Product boliye');
+  else speak(c.name + '. Number boliye');
 }
-
 function vCustOptions(hits){
-  vPend = hits; vPendType = 'cust';
+  vList = hits; vState = 'custpick';
   $('vOut').innerHTML = '<div class="vchips">' + hits.map((h,i)=>
     '<button data-vc="'+i+'">' + (i+1) + '. ' + esc(h.c.name) +
     '<small>' + (h.c.mobile || 'number nahi') + '</small></button>').join('') + '</div>';
-  $('vOut').querySelectorAll('[data-vc]').forEach(b=> b.onclick = ()=> vUseCust(vPend[+b.dataset.vc].c));
+  $('vOut').querySelectorAll('[data-vc]').forEach(b=> b.onclick = ()=> vUseCust(vList[+b.dataset.vc].c));
   speak(hits.slice(0,3).map((h,i)=> (i+1) + '. ' + h.c.name).join(', ') + '. Number boliye.');
 }
 
-function vOptions(hits, qty){
-  vPend = hits; vPendQty = qty; vPendType = 'prod';
+/* ---- product ---- */
+function vAskQty(){
+  vState = 'qty';
+  vShow('<b>' + esc(vProd.name) + '</b> &middot; ' + money(vProd.sell) + ' — kitne nag?');
+  speak(vProd.name + ', rate ' + Math.round(num(vProd.sell)) + '. Kitne nag?');
+}
+function vAskRate(){
+  vState = 'rate';
+  vShow('<b>' + esc(vProd.name) + '</b> — rate boliye');
+  speak(vProd.name + '. Rate boliye');
+}
+function vCommit(){
+  const p = vProd, qty = vQty > 0 ? vQty : 1;
+  $('iName').value = p.name;
+  $('iQty').value = qty;
+  $('iRate').value = num(p.sell) || 0;
+  addItem();
+  const last = cart[cart.length - 1];
+  vReset();
+  if(last){
+    vShow('<b>' + esc(last.name) + '</b> &times; ' + (Math.round(last.qty*100)/100) +
+          ' = ' + money(last.qty*last.rate) + ' — agla item boliye');
+    speak(last.name + ', ' + (Math.round(last.qty*100)/100) + ' nag, ' +
+          Math.round(last.qty*last.rate) + ' rupaye. Agla item boliye');
+  }
+}
+function vTake(p, qty){
+  vProd = p; vQty = qty;
+  if(num(p.sell) <= 0){ vAskRate(); return; }
+  if(qty > 0){ vCommit(); return; }
+  vAskQty();
+}
+function vProdOptions(hits, qty){
+  vList = hits; vState = 'pick'; vQty = qty;
   $('vOut').innerHTML = '<div class="vchips">' + hits.map((h,i)=>
     '<button data-vp="'+i+'">' + (i+1) + '. ' + esc(h.p.name) +
     '<small>' + (num(h.p.sell) ? money(h.p.sell) : 'rate nahi') + '</small></button>').join('') + '</div>';
   $('vOut').querySelectorAll('[data-vp]').forEach(b=> b.onclick = ()=>{
-    const h = vPend[+b.dataset.vp];
-    if(num(h.p.sell) > 0) vAdd(h.p, vPendQty, 0);
-    else { vAwaitRate = { p:h.p, qty:vPendQty }; vPend = null; speak('Rate boliye'); }
+    const h = vList[+b.dataset.vp]; $('vOut').innerHTML = ''; vTake(h.p, vQty);
   });
   speak(hits.slice(0,3).map((h,i)=> (i+1) + '. ' + h.p.name).join(', ') + '. Number boliye.');
 }
+function vProduct(alts){
+  const qty = parseQty(alts[0] || '');
+  const hits = matchProducts(alts);
+  if(!hits.length){ speak('Nahi mila. Dobara boliye'); return; }
+  if(hits.length === 1 || (hits[0].sc >= 0.88 && (!hits[1] || hits[0].sc - hits[1].sc >= 0.12))){
+    vTake(hits[0].p, qty); return;
+  }
+  vProdOptions(hits, qty);
+}
 
+/* ---- main ---- */
 function vHandle(alts){
   const raw = alts[0] || '';
   const q = vnorm(raw);
-  $('vHeard').innerHTML = 'Suna: <b>' + esc(raw) + '</b>';
+  vShow('Suna: <b>' + esc(raw) + '</b>');
   if(!q) return;
 
-  if(/\b(band|stop|bas|khatam|bandh)\b/.test(q)){ speak('Band'); setTimeout(vStop, 900); return; }
+  if(/\b(band|bandh|stop|bas|khatam)\b/.test(q)){ speak('Band'); setTimeout(vStop, 900); return; }
 
-  // waiting for a rate
-  if(vAwaitRate){
-    const v = parseFloat(digitsFrom(raw) || '0');
-    if(v > 0){ vAdd(vAwaitRate.p, vAwaitRate.qty, v); return; }
-    speak('Rate boliye'); return;
+  if(/\b(bhejo|bhej|send|pathva|pathvaa|whatsapp)\b/.test(q)){
+    if(!cart.length){ speak('Bill khali hai'); return; }
+    speak('Bhej raha hoon'); setTimeout(()=> $('bWAtext').click(), 700); return;
+  }
+  if(/\b(hatao|hata|hatav|delete|remove|nikalo|nikal)\b/.test(q)){
+    if(cart.length){ const g = cart.pop(); renderCart(); vReset(); speak(g.name + ' hataya'); }
+    else speak('Bill khali hai');
+    return;
+  }
+  if(/\b(naya bill|new bill|next bill)\b/.test(q)){ $('bClear').click(); vReset(); speak('Naya bill'); return; }
+  if(/\b(nahi|cancel|rehne|chhodo|galat)\b/.test(q) && vState !== 'idle'){
+    vReset(); speak('Theek. Dobara boliye'); return;
   }
 
-  // choosing between matches
-  if(vPend){
-    const i = vIndex(q, vPend.length);
-    if(i !== null && vPend[i]){
-      if(vPendType === 'cust'){ vUseCust(vPend[i].c); return; }
-      const p = vPend[i].p;
-      if(num(p.sell) > 0) vAdd(p, vPendQty, 0);
-      else { vAwaitRate = { p, qty:vPendQty }; vPend = null; speak('Rate boliye'); }
-      return;
-    }
-    if(/\b(nahi|no|cancel|rehne|chhodo)\b/.test(q)){
-      vPend = null; $('vOut').innerHTML = ''; speak('Theek'); return;
-    }
-  }
-
-  // customer name
-  let m = raw.match(/^\s*(customer|grahak|ग्राहक|ग्राहका|naam|name|नाव|नाम)\s+(.+)$/i);
+  // customer
+  let m = raw.match(/^\s*(customer|grahak|ग्राहक|naam|name|नाव|नाम)\s+(.+)$/i);
   if(m){
     const spoken = m[2].trim();
     const cand = matchCustomers(alts);
-    if(cand.length && cand[0].sc >= 0.75 && (!cand[1] || cand[0].sc - cand[1].sc >= 0.15)){
-      vUseCust(cand[0].c);
-    } else if(cand.length){
-      $('cName').value = spoken;
-      vCustOptions(cand);
-    } else {
-      $('cName').value = spoken;
-      speak('Naya customer ' + spoken + '. Number boliye');
-    }
+    if(cand.length && cand[0].sc >= 0.6 && (!cand[1] || cand[0].sc - cand[1].sc >= 0.12)){ vUseCust(cand[0].c); }
+    else if(cand.length){ $('cName').value = spoken; vCustOptions(cand); }
+    else { $('cName').value = spoken; vReset(); speak('Naya customer ' + spoken + '. Number boliye'); }
     return;
   }
-
-  // mobile number
-  if(/\b(number|nambar|mobile|mobail|फोन|नंबर)\b/.test(q) || /^\d[\d\s]{8,}$/.test(raw.trim())){
+  // mobile
+  if(/\b(number|nambar|mobile|mobail)\b/.test(q) || /^[\d\s]{10,}$/.test(raw.trim())){
     const d = digitsFrom(raw);
     if(d.length >= 10){
       $('cMob').value = d.slice(-10);
       saveCustomer(); save(); fillDatalists();
-      speak('Number ' + d.slice(-10).split('').join(' '));
+      vReset(); speak('Number mil gaya. Product boliye');
     } else speak('Poora number dobara boliye');
     return;
   }
 
-  // change the rate of the last item
-  m = q.match(/\b(rate|bhav|dar|daam|price|भाव|दर)\b\s*(.*)$/);
-  if(m){
-    const v = parseFloat(digitsFrom(m[2]) || '0');
-    if(v > 0 && cart.length){
-      cart[cart.length-1].rate = v;
-      renderCart();
-      speak(cart[cart.length-1].name + ' ka rate ' + v);
-    } else if(v > 0){
-      $('iRate').value = v; speak('Rate ' + v);
+  // ---- states
+  if(vState === 'custpick'){
+    const i = vIndex(q, vList.length);
+    if(i !== null && vList[i]){ vUseCust(vList[i].c); return; }
+  }
+  if(vState === 'pick'){
+    const i = vIndex(q, vList.length);
+    if(i !== null && vList[i]){ $('vOut').innerHTML = ''; vTake(vList[i].p, vQty); return; }
+  }
+  if(vState === 'rate'){
+    const v = vNum(raw);
+    if(v > 0){
+      vProd.sell = v;
+      const inP = P.find(x=>x.id === vProd.id);
+      if(inP){ inP.sell = v; inP.later = false; save(); renderProd(); }
+      if(vQty > 0) vCommit(); else vAskQty();
     } else speak('Rate boliye');
     return;
   }
-
-  // remove the last item
-  if(/\b(hatao|hata|hatav|delete|remove|nikalo|nikal|कमी|काढ)\b/.test(q)){
-    if(cart.length){
-      const g = cart.pop(); renderCart();
-      speak(g.name + ' hataya');
-    } else speak('Bill khali hai');
+  if(vState === 'qty'){
+    m = q.match(/\b(rate|bhav|dar|daam|price)\b\s*(.*)$/);
+    if(m){ const v = parseFloat(digitsFrom(m[2]) || '0'); if(v > 0){ vProd.sell = v; speak('Rate ' + v + '. Kitne nag?'); return; } }
+    const v = vNum(raw);
+    if(v > 0){ vQty = v; vCommit(); return; }
+    speak('Kitne nag?');
     return;
   }
 
-  // send
-  if(/\b(bhejo|bhej|send|pathva|pathvaa|whatsapp|भेजो|पाठवा)\b/.test(q)){
-    if(!cart.length){ speak('Bill khali hai'); return; }
-    speak('Bhej raha hoon');
-    setTimeout(()=> $('bWAtext').click(), 700);
+  // rate change of the last item, when idle
+  m = q.match(/\b(rate|bhav|dar|daam|price)\b\s*(.*)$/);
+  if(m){
+    const v = parseFloat(digitsFrom(m[2]) || '0');
+    if(v > 0 && cart.length){
+      cart[cart.length-1].rate = v; renderCart();
+      speak(cart[cart.length-1].name + ' ka rate ' + v);
+    } else if(v > 0){ $('iRate').value = v; speak('Rate ' + v); }
+    else speak('Rate boliye');
     return;
   }
 
-  // new bill
-  if(/\b(naya bill|new bill|next bill|नया|नवीन)\b/.test(q)){
-    $('bClear').click(); speak('Naya bill'); return;
-  }
-
-  // otherwise: a product
-  const qty = parseQty(raw);
-  const hits = matchProducts(alts);
-  if(!hits.length){ speak('Nahi mila, dobara boliye'); return; }
-  const top = hits[0], second = hits[1];
-  if(top.sc >= 0.9 && (!second || top.sc - second.sc >= 0.15)){
-    if(num(top.p.sell) > 0) vAdd(top.p, qty, 0);
-    else { vAwaitRate = { p:top.p, qty }; speak(top.p.name + '. Rate boliye'); }
-    return;
-  }
-  vOptions(hits, qty);
+  vProduct(alts);
 }
 
 $('micMar').onclick = ()=> listen($('micMar'), alts=>{
