@@ -1,18 +1,33 @@
 {
-  "name": "BILL — Ankush Kirana",
+  "name": "BILL \u2014 Ankush Kirana",
   "short_name": "BILL",
-  "description": "Billing app for Ankush Kirana — bills on WhatsApp in Marathi or English.",
+  "description": "Billing app for Ankush Kirana \u2014 bills on WhatsApp in Marathi or English.",
   "start_url": "./",
   "scope": "./",
   "id": "ankush-kirana-bill",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#150B33",
-  "theme_color": "#150B33",
+  "background_color": "#07222B",
+  "theme_color": "#07222B",
   "lang": "en-IN",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
