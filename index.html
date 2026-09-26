@@ -2,7 +2,27 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v8.2  (19-09-2026)
+  Version : v8.3  (26-09-2026)
+  Author  : Ankush New Vision
+-------------------------------------------------------------
+  FILES NEEDED IN THE REPO (same folder)
+    index.html  manifest.json  sw.js  icon-192.png  icon-512.png
+-------------------------------------------------------------
+  CHANGELOG
+  v8.3 - Dashboard rebuilt in Vyapar style, and a storage fix.
+         * Blue header with Aaj / Is hafte / Is mahine range chips;
+           Sale and Purchase totals follow the chosen range
+         * Sale (green) and Purchase (red) money cards
+         * Quick start: New Bill, Product, Customer, Purchase,
+           Poster, Voice, Backup, Report
+         * Recent bills with avatar, bill no. and date; tap to reopen
+         * Light theme only on the dashboard — the app header hides
+           there and the status bar follows the tab
+         * STORAGE FIX: if the app fails to read storage at startup it
+           no longer writes empty lists back over the saved data when
+           closed. That path could wipe everything; a deliberate
+           delete and Restore backup still work.
+  v8.2  (19-09-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
@@ -604,48 +624,98 @@ nav button.on svg{filter:drop-shadow(0 0 6px rgba(47,212,196,.55))}
 .hrow .hd{font-size:12px;color:var(--dim);white-space:nowrap}
 .hrow.low .hr{color:#7BE0A2}
 
-/* ---------- dashboard (violet) ---------- */
-#v-dash{--dv1:#07222B;--dv2:#03121A;--dhero:#0B3A47;--dcard:#0E3341;--dline:#1C5769;
-  --dink:#E6F6FA;--ddim:#84AEBC;--dacc:#2FD4C4}
-#v-dash{margin:-12px -12px 0;padding:0 12px 8px;
-  background:linear-gradient(180deg,var(--dv1),var(--dv2) 55%,var(--dv2))}
-.dhero{position:relative;margin:0 -12px 14px;padding:18px 20px 46px;overflow:hidden;
-  background:var(--dhero);border-radius:0 0 6px 6px}
-.dhero::after{content:"";position:absolute;left:-15%;right:-15%;bottom:-150px;height:230px;
-  border-radius:50% 50% 0 0;background:var(--dv1);border-top:3px solid var(--dacc)}
-.dhero h2{font-family:var(--f-disp);font-size:27px;letter-spacing:.5px;color:#fff;margin:0}
-.dhero p{margin:4px 0 0;font-size:13.5px;color:#8FC7D4}
-.dsec{font-family:var(--f-disp);font-size:19px;letter-spacing:1px;text-transform:uppercase;
-  color:var(--dink);margin:14px 2px 9px}
-.dstat{border-radius:16px;padding:14px 12px;text-align:center}
-.dstat.a{color:#E6F6FA;background:linear-gradient(160deg,#0F6E7E,#0A4450);
-  box-shadow:0 6px 18px rgba(0,0,0,.4)}
-.dstat.b{color:#03201E;background:linear-gradient(160deg,#2FD4C4,#0E7E77);
-  box-shadow:0 6px 18px rgba(0,0,0,.4)}
-.dstat span{display:block;font-size:11.5px;letter-spacing:1.4px;opacity:.85;font-weight:600}
-.dstat b{display:block;font-family:var(--f-disp);font-size:34px;line-height:1.15;margin-top:4px}
-.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.dgrid button{background:var(--dcard);border:1px solid var(--dline);border-radius:16px;
-  padding:13px 4px 10px;color:var(--dink);font-size:12.5px;font-weight:600;
-  display:flex;flex-direction:column;align-items:center;gap:7px}
-.dgrid button svg{width:24px;height:24px;stroke:var(--dacc);fill:none;stroke-width:1.8;
+/* ---------- dashboard (Vyapar style) ---------- */
+#v-dash{--dbg:#F1F4F9;--dhead:#1B4FD8;--dcard:#FFFFFF;--dline:#E2E8F2;
+  --dink:#16203A;--ddim:#6B7794;--dacc:#1B4FD8;--dsoft:#E6EDFD;
+  --dgrn:#17A34A;--dred:#E0453D;--dsh:0 2px 8px rgba(22,32,58,.08)}
+#v-dash{margin:-10px -10px 0;padding:0 10px 18px;background:var(--dbg);
+  min-height:calc(100dvh - 74px)}
+body:has(#v-dash.on){background:var(--dbg,#F1F4F9)}
+body:has(#v-dash.on) header{display:none}
+body:has(#v-dash.on) nav{background:#fff;border-top-color:#E2E8F2}
+body:has(#v-dash.on) nav button{color:#8A95AE}
+body:has(#v-dash.on) nav button.on{color:#1B4FD8}
+body:has(#v-dash.on) nav button.on svg{filter:drop-shadow(0 0 6px rgba(27,79,216,.4))}
+
+.dhero{margin:0 -10px 12px;padding:calc(13px + env(safe-area-inset-top)) 16px 14px;
+  background:var(--dhead)}
+.dhero .top{display:flex;align-items:center;gap:10px}
+.dhero .mk{width:38px;height:38px;border-radius:11px;flex:0 0 auto;display:grid;place-items:center;
+  background:rgba(255,255,255,.2);color:#fff;font-family:var(--f-disp);font-size:18px}
+.dhero h2{font-family:var(--f-disp);font-size:21px;letter-spacing:.7px;color:#fff;margin:0;line-height:1.1}
+.dhero p{margin:3px 0 0;font-size:10.5px;letter-spacing:1.6px;color:#D6E2FA}
+.dhero .ver{margin-left:auto;font-size:11.5px;font-weight:700;color:#BFD0F5;align-self:flex-start}
+.dchip{display:flex;gap:8px;margin-top:13px}
+.dchip button{padding:7px 17px;border-radius:20px;font-size:12.5px;font-weight:600;
+  background:rgba(255,255,255,.16);color:#DCE6FB;border:0}
+.dchip button.on{background:#fff;color:var(--dhead)}
+
+.dmoney{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dmoney>div{background:var(--dcard);border-radius:14px;padding:13px 13px 12px;
+  position:relative;box-shadow:var(--dsh)}
+.dmoney>div::before{content:"";position:absolute;left:13px;top:15px;width:4px;height:24px;border-radius:3px}
+.dmoney>div.s::before{background:var(--dgrn)}
+.dmoney>div.p::before{background:var(--dred)}
+.dmoney span{display:block;margin-left:14px;font-size:10.5px;letter-spacing:1.3px;
+  font-weight:700;color:var(--ddim)}
+.dmoney b{display:block;font-family:var(--f-disp);font-size:29px;color:var(--dink);
+  margin-top:11px;line-height:1}
+.dmoney small{display:block;font-size:11.5px;color:var(--ddim);margin-top:5px}
+
+.dpan{background:var(--dcard);border-radius:14px;padding:13px;margin-top:11px;box-shadow:var(--dsh)}
+.dpan .h{display:flex;align-items:center;margin-bottom:12px}
+.dpan .h b{font-size:15px;font-weight:700;color:var(--dink)}
+.dpan .h a{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--dacc)}
+
+.dgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.dgrid+.dgrid{margin-top:13px}
+.dgrid button{background:transparent;border:0;padding:0;color:var(--dink);
+  font-size:11px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:6px}
+.dgrid button i{width:46px;height:46px;border-radius:14px;background:var(--dsoft);
+  display:grid;place-items:center}
+.dgrid button svg{width:22px;height:22px;stroke:var(--dacc);fill:none;stroke-width:1.9;
   stroke-linecap:round;stroke-linejoin:round}
-.dcard{background:var(--dcard);border-color:var(--dline)}
-.dcard .ttl{color:var(--dacc)}
-.drow{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--dline)}
+
+.drow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--dline)}
 .drow:last-child{border-bottom:0}
-.drow .av{width:38px;height:38px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
-  background:linear-gradient(160deg,#2FD4C4,#128F86);color:#03201E;font-weight:700;font-size:16px}
+.drow .av{width:36px;height:36px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
+  background:var(--dsoft);color:var(--dacc);font-weight:700;font-size:15px}
 .drow .mn{flex:1;min-width:0}
-.drow .mn b{display:block;font-weight:600;font-size:14.5px;color:var(--dink);
+.drow .mn b{display:block;font-weight:600;font-size:14px;color:var(--dink);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.drow .mn small{color:var(--ddim);font-size:11.5px}
-.drow .amt{font-weight:700;color:var(--dacc);white-space:nowrap}
-.dchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 4px}
-.dchips div{background:var(--dcard);border:1px solid var(--dline);border-radius:14px;
-  padding:10px 2px;text-align:center}
-.dchips b{display:block;font-family:var(--f-disp);font-size:21px;color:var(--dacc)}
-.dchips span{font-size:10.5px;color:var(--ddim)}
+.drow .mn small{color:var(--ddim);font-size:11px}
+.drow .amt{font-weight:700;font-size:14.5px;color:var(--dgrn);white-space:nowrap}
+
+.dchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:11px 0 4px}
+.dchips div{background:var(--dcard);border-radius:12px;padding:10px 2px;text-align:center;
+  box-shadow:var(--dsh)}
+.dchips b{display:block;font-family:var(--f-disp);font-size:20px;color:var(--dacc)}
+.dchips span{font-size:10px;color:var(--ddim)}
+.dempty{text-align:center;color:var(--ddim);padding:16px 8px;font-size:13px;line-height:1.55}
+.dempty b{display:block;color:var(--dink);font-size:14px;margin-bottom:3px}
+
+/* Report panel lives inside the light dashboard */
+#v-dash .card{background:var(--dcard);border-color:var(--dline);box-shadow:var(--dsh)}
+#v-dash .card>.ttl{color:var(--dacc)}
+#v-dash .card>.ttl .hint,#v-dash label,#v-dash p{color:var(--ddim)}
+#v-dash input,#v-dash select,#v-dash textarea{background:#F7F9FC;color:var(--dink);
+  border-color:var(--dline)}
+#v-dash .lrow{border-bottom-color:var(--dline)}
+#v-dash .lrow .main b{color:var(--dink)}
+#v-dash .lrow .main small,#v-dash .empty{color:var(--ddim)}
+#v-dash .empty b{color:var(--dink)}
+#v-dash .btn{background:#EEF2F8;color:var(--dink);border-color:var(--dline)}
+#v-dash .btn-gold{background:var(--dacc);color:#fff;box-shadow:none}
+#v-dash .tag{background:var(--dsoft);color:var(--dacc)}
+#v-dash .seg{background:#F7F9FC;border-color:var(--dline)}
+#v-dash .seg button{color:var(--ddim)}
+#v-dash .seg button.on{background:var(--dacc);color:#fff}
+#v-dash .tile.gold{background:linear-gradient(160deg,#3A73EC,#1B4FD8);color:#fff;box-shadow:var(--dsh)}
+#v-dash .tile.green{background:linear-gradient(160deg,#20B057,#0E7A36);color:#fff;box-shadow:var(--dsh)}
+#v-dash .tile::after{display:none}
+#v-dash .bar i{background:linear-gradient(180deg,#6E99F5,#1B4FD8)}
+#v-dash .bar u{color:var(--ddim)}
+#v-dash .bar em{color:var(--dacc)}
 
 /* ---------- voice ---------- */
 .micwrap{position:relative}
@@ -1089,28 +1159,44 @@ Golu Patil 8459937759"></textarea>
 <!-- ============ DASHBOARD ============ -->
 <section id="v-dash" class="view">
   <div class="dhero">
-    <h2 id="dGreet">Namaste</h2>
-    <p>Aaj ka hisaab, ek nazar mein</p>
+    <div class="top">
+      <div class="mk">AK</div>
+      <div>
+        <h2 id="dShopName">ANKUSH KIRANA</h2>
+        <p>KIRANA &amp; GENERAL STORE</p>
+      </div>
+      <span class="ver" id="dVer">v8.3</span>
+    </div>
+    <div class="dchip" id="dRange">
+      <button data-r="d" class="on">Aaj</button>
+      <button data-r="w">Is hafte</button>
+      <button data-r="m">Is mahine</button>
+    </div>
   </div>
 
-  <div class="dsec">Aaj</div>
-  <div class="g2">
-    <div class="dstat a"><span>AAJ KA SALE</span><b class="num" id="dSale2">&#8377;0</b></div>
-    <div class="dstat b"><span>BILLS</span><b class="num" id="dBills2">0</b></div>
+  <div class="dmoney">
+    <div class="s"><span>SALE</span><b class="num" id="dSale2">&#8377;0</b><small id="dSaleSub">0 bills</small></div>
+    <div class="p"><span>PURCHASE</span><b class="num" id="dPur2">&#8377;0</b><small id="dPurSub">0 bills</small></div>
   </div>
 
-  <div class="dsec">Quick start</div>
-  <div class="dgrid">
-    <button data-go="bill"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>New Bill</button>
-    <button data-go="prod"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>Product</button>
-    <button data-go="cust"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>Customer</button>
-    <button data-go="pur"><svg viewBox="0 0 24 24"><path d="M3 6h15l-1.5 9h-12z"/><circle cx="8" cy="20" r="1.3"/><circle cx="16" cy="20" r="1.3"/></svg>Purchase</button>
-    <button data-go="post"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Poster</button>
-    <button data-go="report"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Report</button>
+  <div class="dpan">
+    <div class="h"><b>Quick start</b></div>
+    <div class="dgrid">
+      <button data-go="bill"><i><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg></i>New Bill</button>
+      <button data-go="prod"><i><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg></i>Product</button>
+      <button data-go="cust"><i><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></i>Customer</button>
+      <button data-go="pur"><i><svg viewBox="0 0 24 24"><path d="M3 6h15l-1.5 9h-12z"/><circle cx="8" cy="20" r="1.3"/><circle cx="16" cy="20" r="1.3"/></svg></i>Purchase</button>
+    </div>
+    <div class="dgrid">
+      <button data-go="post"><i><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></i>Poster</button>
+      <button data-go="voice"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></i>Voice</button>
+      <button data-go="backup"><i><svg viewBox="0 0 24 24"><path d="M12 3v11M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg></i>Backup</button>
+      <button data-go="report"><i><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></i>Report</button>
+    </div>
   </div>
 
-  <div class="card dcard" style="margin-top:14px">
-    <div class="ttl">Recent bills <span class="hint" id="dRecN">0</span></div>
+  <div class="dpan">
+    <div class="h"><b>Recent bills</b><a id="dRecN">0</a></div>
     <div id="dRecent"></div>
   </div>
 
@@ -1222,9 +1308,33 @@ Golu Patil 8459937759"></textarea>
 <script>
 'use strict';
 /* ---------------- storage ---------------- */
+// bootHad[k] = this key really held data when the app started.
+// It stays false when the read failed OR the key was genuinely empty;
+// DB.set then refuses to write an empty list over stored data. That is the
+// path that once wiped everything: a failed read at boot, then beforeunload
+// saving the empty arrays back over a full store.
+const bootHad = {};
 const DB = {
-  get(k, d){ try{ const v = JSON.parse(localStorage.getItem(k)); return v === null ? d : v; }catch(e){ return d; } },
-  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ toast('Storage full — take a backup'); } }
+  get(k, d){
+    let v = null, ok = false;
+    try{ const raw = localStorage.getItem(k); v = JSON.parse(raw); ok = true; }catch(e){ ok = false; }
+    const out = (ok && v !== null) ? v : d;
+    bootHad[k] = Array.isArray(out) ? out.length > 0 : !!out;
+    return out;
+  },
+  set(k, v, force){
+    try{
+      if(!force && Array.isArray(v) && v.length === 0 && bootHad[k] === false){
+        const cur = localStorage.getItem(k);
+        if(cur && cur.replace(/\s/g,'') !== '[]'){
+          console.warn('DB.set blocked: refusing to wipe ' + k);
+          return;                       // storage has data we failed to load — never overwrite it
+        }
+      }
+      localStorage.setItem(k, JSON.stringify(v));
+      if(Array.isArray(v) && v.length > 0) bootHad[k] = true;
+    }catch(e){ toast('Storage full — take a backup'); }
+  }
 };
 let P = DB.get('ak_products', []);
 let C = DB.get('ak_customers', []);
@@ -1234,7 +1344,7 @@ let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किर�
 let cart = [];
 let editingBillId = null;
 
-const APP_VER = 'v8.2';
+const APP_VER = 'v8.3';
 const $ = id => document.getElementById(id);
 const money = n => '₹' + (Math.round(n*100)/100).toFixed(2);
 const money0 = n => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -1246,7 +1356,11 @@ const dkey = d => { const x = new Date(d); return x.getFullYear()+'-'+String(x.g
 let toastT;
 function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2200); }
 
-function save(){ DB.set('ak_products',P); DB.set('ak_customers',C); DB.set('ak_bills',B); DB.set('ak_purchases',PU); DB.set('ak_settings',S); }
+function save(force){
+  DB.set('ak_products',P,force); DB.set('ak_customers',C,force);
+  DB.set('ak_bills',B,force); DB.set('ak_purchases',PU,force);
+  DB.set('ak_settings',S,true);
+}
 
 /* ---------------- navigation ---------------- */
 document.querySelectorAll('nav button').forEach(b=>{
@@ -1254,6 +1368,8 @@ document.querySelectorAll('nav button').forEach(b=>{
     document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
     document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); $('v-'+b.dataset.v).classList.add('on');
+    const tc = document.querySelector('meta[name="theme-color"]');
+    if(tc) tc.setAttribute('content', b.dataset.v === 'dash' ? '#1B4FD8' : '#07222B');
     window.scrollTo(0,0);
     if(b.dataset.v==='dash') renderDash();
     if(b.dataset.v==='cust') renderCust();
@@ -3116,6 +3232,25 @@ $('bPoMake').onclick = async ()=>{
 };
 
 /* ---------------- dashboard ---------------- */
+let dRange = 'd';
+function inRange(ts){
+  if(dRange === 'd') return dkey(ts) === dkey(Date.now());
+  if(dRange === 'w'){
+    const c = new Date(); c.setDate(c.getDate() - 6); c.setHours(0,0,0,0);
+    return ts >= c.getTime();
+  }
+  const n = new Date();
+  return dkey(ts).slice(0,7) === n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0');
+}
+document.querySelectorAll('#dRange button').forEach(b=>{
+  b.onclick = ()=>{
+    dRange = b.dataset.r;
+    document.querySelectorAll('#dRange button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    renderDash();
+  };
+});
+
 function renderDash(){
   const today = dkey(Date.now());
   const now = new Date();
@@ -3155,11 +3290,16 @@ function renderDash(){
     '<span class="tag">'+(Math.round(q*100)/100)+' qty</span></div>').join('')
     : '<div class="empty"><b>Nothing sold yet</b>Save a bill and this fills up.</div>';
 
-  // --- new dashboard top block
-  const first = (S.shop || 'Ankush').trim().split(/\s+/)[0];
-  $('dGreet').textContent = 'Namaste, ' + first.charAt(0) + first.slice(1).toLowerCase();
-  $('dSale2').textContent = money0(tSale);
-  $('dBills2').textContent = tBills;
+  // --- Vyapar-style top block
+  $('dShopName').textContent = S.shop || 'ANKUSH KIRANA';
+  $('dVer').textContent = APP_VER;
+  let rSale = 0, rBills = 0, rPur = 0, rPurN = 0;
+  B.forEach(b=>{ if(inRange(b.date)){ rSale += b.grand; rBills++; } });
+  PU.forEach(u=>{ if(inRange(u.date)){ rPur += num(u.total); rPurN++; } });
+  $('dSale2').textContent = money0(rSale);
+  $('dSaleSub').textContent = rBills + (rBills === 1 ? ' bill' : ' bills');
+  $('dPur2').textContent = money0(rPur);
+  $('dPurSub').textContent = rPurN + (rPurN === 1 ? ' bill' : ' bills');
   $('nProd').textContent = P.length;
   $('nCust').textContent = C.length;
   $('nSup').textContent = suppliers().length;
@@ -3173,7 +3313,7 @@ function renderDash(){
       '<span class="av">'+esc(nm.charAt(0).toUpperCase())+'</span>' +
       '<span class="mn"><b>'+esc(nm)+'</b><small>Bill #'+b.no+' &middot; '+dstr(b.date)+'</small></span>' +
       '<span class="amt num">'+money0(b.grand)+'</span></div>';
-  }).join('') : '<div class="empty"><b>Koi bill nahi</b>Pehla bill banate hi yahan dikhega.</div>';
+  }).join('') : '<div class="dempty"><b>Koi bill nahi</b>Pehla bill banate hi yahan dikhega.</div>';
   rb.querySelectorAll('[data-open2]').forEach(r=> r.onclick = ()=>{
     const b = B.find(x=>x.id === r.dataset.open2); if(!b) return;
     cart = JSON.parse(JSON.stringify(b.items));
@@ -3190,6 +3330,12 @@ function renderDash(){
 document.querySelectorAll('.dgrid button').forEach(b=>{
   b.onclick = ()=>{
     const go = b.dataset.go;
+    if(go === 'backup'){ $('bExport').click(); return; }
+    if(go === 'voice'){
+      document.querySelector('nav button[data-v="bill"]').click();
+      setTimeout(()=>{ if(!vOn) $('vStart').click(); }, 350);
+      return;
+    }
     if(go === 'report'){
       const m = $('dashMore');
       m.style.display = m.style.display === 'none' ? 'block' : 'none';
@@ -3230,7 +3376,7 @@ $('fImport').onchange = e=>{
       if(!d.P && !d.B) throw new Error('bad file');
       if(!confirm('Restore this backup? Current data on this phone will be replaced.')) return;
       P = d.P || []; C = d.C || []; B = d.B || []; PU = d.PU || []; S = Object.assign(S, d.S || {});
-      save(); fillDatalists(); renderProd(); renderCust(); renderPu(); renderDash();
+      save(true); fillDatalists(); renderProd(); renderCust(); renderPu(); renderDash();
       $('hShop').textContent = S.shop; setLang(S.lang || 'mr'); renderCart();
       toast('Backup restored');
     }catch(err){ toast('That file is not a valid backup'); }
