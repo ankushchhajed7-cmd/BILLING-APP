@@ -2,13 +2,21 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v9.0  (13-11-2026)
+  Version : v9.1  (13-11-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v9.1 - Fix: Bolke Bill screen sat on "Sun raha hoon 0:00" doing nothing.
+         * When the phone's voice service refused the mic, the app paused
+           itself and the warning toast was hidden BEHIND the panel. Now the
+           reason shows in red on the screen, with what to do
+         * On a mic-permission refusal it asks for the mic once by itself and
+           restarts; mic busy (screen recording/call), no internet and
+           unsupported language each get their own message
+         * Toasts now show above the full-screen panel
   v9.0 - "Bolke pura bill banao" — VoiceKhata-style voice billing.
          * One full-screen mic: say customer, mobile and ALL items in
            one go (qty, unit, rate), tap Done. No back-and-forth.
@@ -778,6 +786,8 @@ body:has(#v-dash.on) nav button.on svg{filter:drop-shadow(0 0 6px rgba(27,79,216
 .vb-st h2{font-size:30px;color:var(--text)}
 .vb-st h2 i{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--brass);margin-right:8px;vertical-align:middle;animation:vbdot 1s infinite}
 @keyframes vbdot{50%{opacity:.25}}
+.vb-warn{margin:12px auto 0;max-width:420px;padding:10px 12px;border-radius:12px;background:rgba(226,112,90,.16);border:1px solid var(--danger);color:#FFD9CF;font-size:13.5px;line-height:1.55;text-align:left}
+.vb-warn b{color:#fff}
 .vb-time{display:inline-block;margin-top:6px;padding:4px 14px;border-radius:20px;background:#06202A;border:1px solid var(--line);font-size:18px;font-weight:600}
 .vb-bars{display:flex;align-items:center;justify-content:center;gap:4px;height:84px;margin:16px 0 8px}
 .vb-bars b{width:5px;border-radius:4px;background:linear-gradient(180deg,#35E0CE,#128F86);height:6px;transition:height .09s}
@@ -817,7 +827,7 @@ body:has(#v-dash.on) nav button.on svg{filter:drop-shadow(0 0 6px rgba(27,79,216
 .vb-tot{display:flex;justify-content:space-between;font-size:18px;font-weight:700;padding:4px 2px}
 
 /* ---------- misc ---------- */
-.toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
+.toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:90;opacity:0;
   background:linear-gradient(160deg,#35E0CE,#128F86);color:#03201E;padding:11px 18px;border-radius:11px;
   font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.5);transition:.22s;max-width:90vw;text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
@@ -1417,6 +1427,7 @@ Golu Patil 8459937759"></textarea>
       <h2 id="vbStTxt"><i></i>Sun raha hoon</h2>
       <div class="vb-time num" id="vbTime">0:00</div>
     </div>
+    <div class="vb-warn" id="vbWarn" style="display:none"></div>
     <div class="vb-bars" id="vbBars"></div>
     <div class="vb-hint">
       <p>✦ Inme se jo bhi ho, boliye</p>
@@ -1506,7 +1517,7 @@ let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किर�
 let cart = [];
 let editingBillId = null;
 
-const APP_VER = 'v9.0';
+const APP_VER = 'v9.1';
 const $ = id => document.getElementById(id);
 const money = n => '₹' + (Math.round(n*100)/100).toFixed(2);
 const money0 = n => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -3453,12 +3464,42 @@ function vbSR(){
     }
     if(fin.trim()){ vbSt.finals.push(fin.trim()); vbSt.interim = ''; }
     else vbSt.interim = inter.trim();
+    vbSt.errN = 0; if(vbSt.warnOn) vbWarn('');
     vbSt.talk = Date.now(); vbLive();
   };
   r.onspeechstart = ()=>{ vbSt.talk = Date.now(); };
+  r.onaudiostart = ()=>{ vbSt.audioOk = true; };
   r.onerror = ev=>{
-    if(ev.error === 'not-allowed' || ev.error === 'service-not-allowed'){ toast('Mic ki permission do'); vbSt.paused = true; $('vbPause').innerHTML = '▶<small>Chalu</small>'; }
-    else if(ev.error === 'network') toast('Voice ke liye internet chahiye');
+    const er = ev.error || 'unknown';
+    if(er === 'no-speech' || er === 'aborted') return;
+    vbSt.errN = (vbSt.errN || 0) + 1;
+    if(er === 'not-allowed' || er === 'service-not-allowed'){
+      vbPauseUI(true);
+      if(!vbSt.permTried && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+        vbSt.permTried = true;
+        vbWarn('Mic ki permission maang raha hoon… upar <b>Allow</b> dabaiye.');
+        navigator.mediaDevices.getUserMedia({ audio:true }).then(st=>{
+          st.getTracks().forEach(t=> t.stop());
+          vbWarn(''); vbPauseUI(false); setTimeout(vbSR, 400);
+        }).catch(()=> vbWarn('⚠ Mic band hai (' + er + ').<br>Chrome → ⋮ → <b>Settings → Site settings → Microphone</b> → is site ko <b>Allow</b> karo, phir <b>▶ Chalu</b>.<br>Tab tak <b>⌨ Likho</b> se bill bana sakte ho.'));
+      } else {
+        vbWarn('⚠ Phone ki voice service ne mana kiya (' + er + ').<br>Screen recording ya mic wala koi aur app band karke <b>▶ Chalu</b> dabao. ' +
+               'APK me na chale to app ko <b>Chrome</b> me kholkar try karo. Tab tak <b>⌨ Likho</b>.');
+      }
+    } else if(er === 'audio-capture'){
+      vbPauseUI(true);
+      vbWarn('⚠ Mic nahi mil raha (audio-capture).<br>Screen recording / call / koi aur mic wala app band karke <b>▶ Chalu</b> dabao.');
+    } else if(er === 'network'){
+      vbWarn('⚠ Voice ke liye internet chahiye (network). Net on karke <b>▶ Chalu</b>.');
+      vbPauseUI(true);
+    } else if(er === 'language-not-supported' && (S.bvlang || 'hi-IN') !== 'en-IN'){
+      vbWarn('हिंदी voice is phone par nahi mili — English par chala raha hoon.');
+      S.bvlang = 'en-IN'; save(); vbLangUI();
+    } else vbWarn('⚠ Voice error: ' + esc(er));
+    if(vbSt.errN >= 4 && !vbSt.paused){
+      vbPauseUI(true);
+      vbWarn('⚠ Voice baar baar ruk rahi hai (' + esc(er) + '). <b>▶ Chalu</b> dabakar dobara try karo, ya <b>⌨ Likho</b>.');
+    }
   };
   r.onend = ()=>{
     if(vbSt.recog === r) vbSt.recog = null;
@@ -3573,6 +3614,7 @@ function vbOpen(append){
   vbSt.on = true; vbSt.appendTo = append ? vbSt.draft : null;
   if(!append) vbSt.draft = null;
   vbSt.finals = []; vbSt.interim = ''; vbSt.paused = false; vbSt.acc = 0; vbSt.t0 = Date.now();
+  vbSt.errN = 0; vbSt.permTried = false; vbSt.audioOk = false; vbWarn('');
   $('vb').classList.add('on'); vbLangUI(); vbModeChip();
   $('vbType').value = ''; $('vbType').style.display = SR || vbAiReady() ? 'none' : 'block';
   $('vbPause').innerHTML = '⏸<small>Pause</small>';
@@ -3592,14 +3634,25 @@ function vbClose(){
   clearInterval(vbSt.timer);
   $('vb').classList.remove('on');
 }
+function vbWarn(html){
+  const w = $('vbWarn');
+  vbSt.warnOn = !!html;
+  w.innerHTML = html || ''; w.style.display = html ? 'block' : 'none';
+}
+function vbPauseUI(p){
+  if(p && !vbSt.paused){ vbSt.paused = true; vbSt.acc += Date.now() - vbSt.t0; }
+  else if(!p && vbSt.paused){ vbSt.paused = false; vbSt.t0 = Date.now(); }
+  $('vbPause').innerHTML = p ? '▶<small>Chalu</small>' : '⏸<small>Pause</small>';
+  if(p) $('vbStTxt').textContent = 'Ruka hua'; else $('vbStTxt').innerHTML = '<i></i>Sun raha hoon';
+  vbTick();
+}
 function vbPauseToggle(){
   if(vbSt.paused){
-    vbSt.paused = false; vbSt.t0 = Date.now();
-    $('vbPause').innerHTML = '⏸<small>Pause</small>'; $('vbStTxt').innerHTML = '<i></i>Sun raha hoon';
+    vbSt.errN = 0; vbSt.permTried = false; vbWarn('');
+    vbPauseUI(false);
     if(!vbSt.ai) vbSR();
   } else {
-    vbSt.paused = true; vbSt.acc += Date.now() - vbSt.t0;
-    $('vbPause').innerHTML = '▶<small>Chalu</small>'; $('vbStTxt').textContent = 'Ruka hua';
+    vbPauseUI(true);
     vbSRStop();
   }
 }
@@ -3628,13 +3681,14 @@ async function vbDone(){
       await new Promise(res=> vbSRStop(res));
       if(vbSt.interim){ vbSt.finals.push(vbSt.interim); vbSt.interim = ''; }
       const text = typed || vbSt.finals.join(' ¦ ');   // ¦ = a pause: splits items only when one is complete
-      if(!text.replace(/¦/g,'').trim()) throw new Error('Kuch suna nahi — dobara boliye');
+      if(!text.replace(/¦/g,'').trim()) throw new Error(vbSt.audioOk ? 'Kuch suna nahi — thoda zor se / paas se boliye, phir Done.'
+                                                                       : 'Mic se awaaz hi nahi aayi. Upar ka error dekhiye ya ⌨ Likho se likhiye.');
       draft = vbFromText(text);
     }
   }catch(e){
-    toast(e.message || 'Gadbad hui');
-    vbPhase('listen'); vbSt.paused = false; vbSt.t0 = Date.now();
-    $('vbPause').innerHTML = '⏸<small>Pause</small>';
+    vbPhase('listen');
+    vbWarn('⚠ ' + esc(e.message || 'Gadbad hui'));
+    vbSt.paused = true; vbPauseUI(false); vbSt.errN = 0;
     if(vbAiReady()) vbAiStart().catch(()=>{}); else vbSR();
     if(!vbSt.raf) vbSt.raf = requestAnimationFrame(vbBarsLoop);
     return;

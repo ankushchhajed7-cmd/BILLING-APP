@@ -1,6 +1,6 @@
-/* BILL — Ankush Kirana | service worker v1.2 (app v9.0)
+/* BILL — Ankush Kirana | service worker v1.3 (app v9.1)
    Network-first: always tries the live file, falls back to cache when offline. */
-const CACHE = 'bill-v1.2';
+const CACHE = 'bill-v1.3';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

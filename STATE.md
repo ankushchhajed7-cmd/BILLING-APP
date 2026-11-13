@@ -3,7 +3,16 @@
 Live: GitHub Pages of `ankushchhajed7-cmd/BILLING-APP`
 Files: `index.html` (whole app), `sw.js` (network-first cache), `manifest.json`, `icon-192.png`, `icon-512.png`
 
-## Current version: v9.0 (13-11-2026) — branch `feature-v9.0`
+## Current version: v9.1 (13-11-2026) — branch `feature-v9.1`
+
+### v9.1 — fix: Bolke Bill stuck on "Sun raha hoon 0:00"
+- Seen on the phone: the screen opened, Pause button showed "▶ Chalu", timer stayed 0:00, nothing heard, Done did nothing visible.
+- Cause: the phone's voice service refused the mic (`not-allowed` / mic busy). The app paused itself and showed a toast, but the toast was hidden behind the full-screen panel.
+- Fix: red warning box on the screen with the exact reason and what to do; on a permission refusal it asks for the mic once and restarts; separate messages for mic busy (screen recording / call), no internet, unsupported language; toasts now above the panel; empty Done explains why.
+- `sw.js` cache `bill-v1.3`.
+- Note: screen recording with mic audio can block the voice service on Android — test without it.
+
+## v9.0 (13-11-2026) — merged to main
 
 ### v9.0 — "Bolke pura bill banao" (VoiceKhata-style)
 - Full-screen mic. Say customer, mobile and ALL items at once → **Done** → draft bill → fix any line → **Bill me daalo**.
