@@ -2,13 +2,35 @@
 <!--
 =============================================================
   ANKUSH KIRANA — Billing PWA
-  Version : v8.3  (26-09-2026)
+  Version : v9.0  (13-11-2026)
   Author  : Ankush New Vision
 -------------------------------------------------------------
   FILES NEEDED IN THE REPO (same folder)
     index.html  manifest.json  sw.js  icon-192.png  icon-512.png
 -------------------------------------------------------------
   CHANGELOG
+  v9.0 - "Bolke pura bill banao" — VoiceKhata-style voice billing.
+         * One full-screen mic: say customer, mobile and ALL items in
+           one go (qty, unit, rate), tap Done. No back-and-forth.
+         * Draft bill appears: tap any line to fix product / qty /
+           unit / rate, or delete. "Aur bolo" adds more by voice.
+           "Bill me daalo" fills customer + items into the bill.
+         * Voice language is Hindi by default (was English) — the main
+           reason it "heard something else". Marathi / English too.
+         * Hindi + Marathi numbers 1-100, sau/hazar, dedh, dhai, sava,
+           sadhe, paune, paav, aadha. "Ek sau bees" = 120 (was 1).
+         * Matching uses English name + Marathi name + new "Bolchal
+           naam" field + a built-in kirana dictionary (चीनी = शक्कर =
+           साखर = sugar, तेल = oil, तांदूळ = rice …) + sound-alike
+           matching (कोलगेट finds Colgate).
+         * Learns: when you correct a product, what you said is saved
+           as that product's bolchal naam, so next time it is right.
+         * Mobile can be said as digits, pairs or "double nau".
+         * Optional AI mode (Report > Gemini key): the audio itself is
+           sent to Gemini, like VoiceKhata. Free mode needs no key.
+         * Units (kilo, packet, jar, puda…) show in the cart.
+         * Old one-item-at-a-time voice kept as a small button.
+  v8.3  (26-09-2026)
   v8.3 - Dashboard rebuilt in Vyapar style, and a storage fix.
          * Blue header with Aaj / Is hafte / Is mahine range chips;
            Sale and Purchase totals follow the chosen range
@@ -742,6 +764,58 @@ body:has(#v-dash.on) nav button.on svg{filter:drop-shadow(0 0 6px rgba(27,79,216
   border:1px solid var(--brass);color:var(--text);font-size:13.5px;font-weight:600;text-align:left}
 .vchips button small{display:block;font-weight:500;color:var(--brass);font-size:11.5px;margin-top:2px}
 
+/* ---------- v9.0 Bolke Bill (VoiceKhata style) ---------- */
+.vb{position:fixed;inset:0;z-index:70;display:none;flex-direction:column;
+  background:radial-gradient(700px 380px at 50% 0%,#12908655,transparent),linear-gradient(180deg,#0B2E3A,#03121A);
+  padding:calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom))}
+.vb.on{display:flex}
+.vb-top{display:flex;align-items:center;gap:8px}
+.vb-x{width:42px;height:42px;border-radius:50%;background:#0E3341;border:1px solid var(--line);color:var(--text);font-size:18px;padding:0}
+.vb-top .seg{flex:1}
+.vb-mode{font-size:11px;padding:5px 9px;border-radius:20px;border:1px solid var(--line);color:var(--brass-lt);white-space:nowrap}
+.vb-body{flex:1;overflow:auto;margin-top:10px;-webkit-overflow-scrolling:touch}
+.vb-st{text-align:center;margin-top:14px}
+.vb-st h2{font-size:30px;color:var(--text)}
+.vb-st h2 i{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--brass);margin-right:8px;vertical-align:middle;animation:vbdot 1s infinite}
+@keyframes vbdot{50%{opacity:.25}}
+.vb-time{display:inline-block;margin-top:6px;padding:4px 14px;border-radius:20px;background:#06202A;border:1px solid var(--line);font-size:18px;font-weight:600}
+.vb-bars{display:flex;align-items:center;justify-content:center;gap:4px;height:84px;margin:16px 0 8px}
+.vb-bars b{width:5px;border-radius:4px;background:linear-gradient(180deg,#35E0CE,#128F86);height:6px;transition:height .09s}
+.vb-hint{margin:6px auto 0;max-width:360px;background:#06202A;border:1px solid var(--line);border-radius:14px;padding:11px 13px;font-size:13px;line-height:1.75;color:var(--dim)}
+.vb-hint p{margin:0 0 4px;text-align:center;color:var(--brass);font-weight:600}
+.vb-hint b{color:var(--brass-lt);font-weight:600}
+.vb-live{margin:10px auto 0;max-width:420px;min-height:46px;background:#06202A;border:1px dashed var(--line);border-radius:12px;
+  padding:9px 11px;font-size:14px;line-height:1.55;color:var(--text);white-space:pre-wrap}
+.vb-live em{color:var(--dim);font-style:normal}
+.vb-type{width:100%;min-height:96px;margin-top:10px}
+.vb-bot{display:flex;align-items:center;gap:10px;margin-top:10px}
+.vb-round{width:54px;height:54px;border-radius:50%;padding:0;background:#0E3341;border:1px solid var(--line);color:var(--text);font-size:19px;flex:none}
+.vb-round small{display:block;font-size:10px;color:var(--dim);margin-top:2px}
+.vb-done{flex:1;height:56px;border-radius:30px;border:0;font-size:19px;font-weight:700;color:#03201E;
+  background:linear-gradient(160deg,#35E0CE,#128F86);box-shadow:0 8px 22px rgba(18,143,134,.45)}
+.vb-wait{text-align:center;margin-top:30vh;font-size:22px;font-family:var(--f-disp);color:var(--brass-lt)}
+.vb-wait i{display:block;width:44px;height:44px;margin:0 auto 14px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--brass);animation:vbspin .8s linear infinite}
+@keyframes vbspin{to{transform:rotate(360deg)}}
+.vb-card{background:#06202A;border:1px solid var(--line);border-radius:14px;padding:10px 11px;margin-bottom:10px}
+.vb-tip{font-size:12px;color:var(--dim);text-align:center;margin:0 0 8px}
+.vb-row{display:flex;gap:8px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid rgba(47,212,196,.14)}
+.vb-row:last-child{border-bottom:0}
+.vb-row .l{flex:1;min-width:0}
+.vb-row .n{font-size:15px;font-weight:600;line-height:1.3}
+.vb-row .s{font-size:12.5px;color:var(--dim);margin-top:2px}
+.vb-row .a{font-size:15px;font-weight:700;text-align:right;white-space:nowrap}
+.vb-tag{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:10px;margin-left:5px;vertical-align:middle}
+.vb-tag.new{background:rgba(53,224,206,.16);color:#35E0CE}
+.vb-tag.chk{background:rgba(255,190,80,.16);color:#FFC461}
+.vb-tag.old{background:rgba(110,153,245,.16);color:#9DB8F7}
+.vb-ed{margin-top:8px;padding:9px;border-radius:11px;background:#0B2E3A;border:1px solid var(--brass)}
+.vb-ed .vchips{margin:0 0 8px}
+.vb-ed .vchips button{padding:7px 9px;font-size:12.5px}
+.vb-ed .vchips button.on{background:linear-gradient(160deg,#35E0CE,#128F86);color:#03201E}
+.vb-ed .vchips button.on small{color:#03201E}
+.vb-heard{font-size:12px;color:var(--dim);line-height:1.5;margin-top:4px}
+.vb-tot{display:flex;justify-content:space-between;font-size:18px;font-weight:700;padding:4px 2px}
+
 /* ---------- misc ---------- */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);z-index:50;opacity:0;
   background:linear-gradient(160deg,#35E0CE,#128F86);color:#03201E;padding:11px 18px;border-radius:11px;
@@ -802,7 +876,11 @@ body:has(#v-dash.on) nav button.on svg{filter:drop-shadow(0 0 6px rgba(27,79,216
 
   <div class="card" id="vCard">
     <div class="ttl">Voice billing <span class="hint">bina type kiye</span></div>
-    <button class="btn-gold full" id="vStart">🎤 Voice shuru karo</button>
+    <button class="btn-gold full" id="vbOpen" style="font-size:16px;padding:13px">🎤 Bolke pura bill banao</button>
+    <p style="color:var(--dim);font-size:12px;margin:7px 2px 8px;line-height:1.5">
+      Ek saath boliye: naam, mobile, saare items — phir <b style="color:var(--brass-lt)">Done</b>. Bill check karke daal do.
+    </p>
+    <button class="btn full btn-sm" id="vStart">🎤 Ek-ek item wala purana tarika</button>
     <div id="vPanel" style="display:none">
       <div class="vhear" id="vHeard">Boliye…</div>
       <div id="vBig" style="display:none"></div>
@@ -909,6 +987,10 @@ body:has(#v-dash.on) nav button.on svg{filter:drop-shadow(0 0 6px rgba(27,79,216
       <label for="pMar">Marathi name <span style="text-transform:none;letter-spacing:0">— WhatsApp bill mein yahi jayega</span></label>
       <input id="pMar" placeholder="उदा. साखर १ किलो" autocomplete="off">
       <button class="mic" id="micMar" title="Marathi mein bolo"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
+    </div>
+    <div style="margin-bottom:8px">
+      <label for="pAlias">Bolchal naam <span style="text-transform:none;letter-spacing:0">— voice ke liye, comma se alag</span></label>
+      <input id="pAlias" placeholder="उदा. शक्कर, चीनी, sakhar" autocomplete="off">
     </div>
     <div class="g3">
       <div>
@@ -1253,6 +1335,20 @@ Golu Patil 8459937759"></textarea>
         <button data-l="mr-IN">मराठी</button>
       </div>
     </div>
+    <div style="margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:11px">
+      <label>AI voice (Gemini) <span style="text-transform:none;letter-spacing:0">— optional, VoiceKhata jaisa sabse sahi</span></label>
+      <input id="sAiKey" type="password" placeholder="Gemini API key (aistudio.google.com)" autocomplete="off" style="margin-bottom:7px">
+      <div class="g2">
+        <input id="sAiModel" placeholder="gemini-2.5-flash" autocomplete="off">
+        <div class="seg" id="sAiSeg">
+          <button data-ai="0">Free</button>
+          <button data-ai="1">AI</button>
+        </div>
+      </div>
+      <p style="color:var(--dim);font-size:11.5px;margin:6px 2px 0;line-height:1.5">
+        AI on ho to awaaz seedhe Gemini sunta hai (internet chahiye). Key sirf is phone me rehti hai, GitHub par nahi jaati.
+      </p>
+    </div>
     <div style="margin-bottom:10px">
       <label for="sVillage">Gaon / area <span style="text-transform:none;letter-spacing:0">— poster par dikhega</span></label>
       <input id="sVillage" placeholder="उदा. ताहाराबाद">
@@ -1303,6 +1399,72 @@ Golu Patil 8459937759"></textarea>
   <button class="btn-gold full" id="bCloseSheet" style="margin-top:10px">Close</button>
 </div></div>
 
+<!-- ============ v9.0 BOLKE BILL overlay ============ -->
+<div class="vb" id="vb">
+  <div class="vb-top">
+    <button class="vb-x" id="vbClose" aria-label="Band">✕</button>
+    <div class="seg three" id="vbLang">
+      <button data-l="hi-IN">हिंदी</button>
+      <button data-l="mr-IN">मराठी</button>
+      <button data-l="en-IN">English</button>
+    </div>
+    <span class="vb-mode" id="vbMode">Free</span>
+  </div>
+
+  <!-- listening -->
+  <div class="vb-body" id="vbListen">
+    <div class="vb-st">
+      <h2 id="vbStTxt"><i></i>Sun raha hoon</h2>
+      <div class="vb-time num" id="vbTime">0:00</div>
+    </div>
+    <div class="vb-bars" id="vbBars"></div>
+    <div class="vb-hint">
+      <p>✦ Inme se jo bhi ho, boliye</p>
+      <b>Customer</b> Ramesh Patil &nbsp;•&nbsp; <b>mobile</b> 98220 12345<br>
+      <b>2 kilo</b> sakhar <b>45 rupaye</b>, <b>1</b> tel, <b>5 packet</b> Maggi<br>
+      <b>dedh kilo</b> tuar dal, <b>paav kilo</b> jeera…
+    </div>
+    <div class="vb-live" id="vbLive"><em>Jo suna wo yahan dikhega…</em></div>
+    <textarea class="vb-type" id="vbType" style="display:none" placeholder="Yahan likho ya paste karo, phir Done"></textarea>
+  </div>
+
+  <!-- working -->
+  <div class="vb-body" id="vbWork" style="display:none">
+    <div class="vb-wait"><i></i><span id="vbWorkTxt">Bill bana raha hoon…</span></div>
+  </div>
+
+  <!-- review -->
+  <div class="vb-body" id="vbReview" style="display:none">
+    <div class="vb-card">
+      <div class="g2">
+        <div>
+          <label for="vbName">Customer <span id="vbCustTag"></span></label>
+          <input id="vbName" placeholder="Naam" autocomplete="off">
+        </div>
+        <div>
+          <label for="vbMob">Mobile</label>
+          <input id="vbMob" type="tel" inputmode="numeric" placeholder="10 digit" autocomplete="off">
+        </div>
+      </div>
+    </div>
+    <p class="vb-tip">Kisi bhi line ko dabakar badal sakte hain</p>
+    <div class="vb-card" id="vbItems"></div>
+    <div class="vb-card"><div class="vb-tot"><span>Total</span><span class="num" id="vbTotal">₹0</span></div></div>
+    <div class="vb-heard" id="vbHeard"></div>
+  </div>
+
+  <div class="vb-bot" id="vbBotListen">
+    <button class="vb-round" id="vbCancel">✕<small>Cancel</small></button>
+    <button class="vb-round" id="vbPause">⏸<small>Pause</small></button>
+    <button class="vb-round" id="vbTypeBtn">⌨<small>Likho</small></button>
+    <button class="vb-done" id="vbDone">✓ Done</button>
+  </div>
+  <div class="vb-bot" id="vbBotReview" style="display:none">
+    <button class="btn" id="vbMore" style="flex:1;height:52px;border-radius:26px;font-size:15px">🎤 Aur bolo</button>
+    <button class="vb-done" id="vbApply">✓ Bill me daalo</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1344,7 +1506,7 @@ let S = Object.assign({ shop:'ANKUSH KIRANA', shopMr:'अंकुश किर�
 let cart = [];
 let editingBillId = null;
 
-const APP_VER = 'v8.3';
+const APP_VER = 'v9.0';
 const $ = id => document.getElementById(id);
 const money = n => '₹' + (Math.round(n*100)/100).toFixed(2);
 const money0 = n => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -1442,7 +1604,7 @@ function renderProd(){
   });
   box.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=>{
     const p = P.find(x=>x.id===b.dataset.edit); if(!p) return;
-    $('pName').value = p.name; $('pMar').value = p.mar||''; $('pPur').value = p.pur||''; $('pSell').value = p.sell||'';
+    $('pName').value = p.name; $('pMar').value = p.mar||''; $('pAlias').value = p.alias||''; $('pPur').value = p.pur||''; $('pSell').value = p.sell||'';
     $('bPAdd').textContent = 'Save changes';
     $('pName').scrollIntoView({behavior:'smooth',block:'center'});
   });
@@ -1513,11 +1675,11 @@ $('bPAdd').onclick = ()=>{
   const name = $('pName').value.trim();
   if(!name){ toast('Enter a product name'); $('pName').focus(); return; }
   const ex = findProd(name);
-  const data = { name, mar:$('pMar').value.trim(), pur:num($('pPur').value), sell:num($('pSell').value) };
+  const data = { name, mar:$('pMar').value.trim(), alias:$('pAlias').value.trim(), pur:num($('pPur').value), sell:num($('pSell').value) };
   if(ex){ Object.assign(ex, data); toast('Product updated'); }
   else { P.push(Object.assign({ id:'p'+Date.now()+Math.random().toString(36).slice(2,6) }, data)); toast('Product saved'); }
   P.sort((a,b)=>a.name.localeCompare(b.name));
-  save(); $('pName').value=''; $('pMar').value=''; $('pPur').value=''; $('pSell').value='';
+  save(); $('pName').value=''; $('pMar').value=''; $('pAlias').value=''; $('pPur').value=''; $('pSell').value='';
   $('bPAdd').textContent = 'Save'; renderProd(); fillDatalists();
 };
 
@@ -1707,7 +1869,7 @@ function renderCart(){
   } else {
     box.innerHTML = cart.map((i,ix)=>
       '<div class="item"><div><div class="nm">'+esc(i.name)+'</div>' +
-      '<div class="sub num">'+i.qty+' × '+money(i.rate)+'</div></div>' +
+      '<div class="sub num">'+i.qty+(i.u ? ' '+esc(i.u) : '')+' × '+money(i.rate)+'</div></div>' +
       '<div class="amt num">'+money(i.qty*i.rate)+'</div>' +
       '<button class="btn-x" data-rm="'+ix+'">✕</button></div>').join('');
     box.querySelectorAll('[data-rm]').forEach(b=> b.onclick = ()=>{
@@ -2250,10 +2412,26 @@ const DEV = {'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'n','च':'ch','छ
 'ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'v','श':'sh','ष':'sh','स':'s','ह':'h','ळ':'l',
 'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
 'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','े':'e','ै':'ai','ो':'o','ौ':'au','ं':'n','ँ':'n','ः':'h','्':'',
-'़':'','ऑ':'o','ॉ':'o','०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9'};
+'़':'','ऑ':'o','ॉ':'o','ॅ':'e','ऋ':'ri','ृ':'ri','०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9',
+'ड़':'r','ढ़':'rh','क़':'k','ज़':'z','फ़':'f'};
+const DEV_CONS = new Set('कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहळड़ढ़क़ज़फ़'.split(''));
+const NUKTA = {'ड':'r','ढ':'rh','क':'k','ज':'z','फ':'f','ग':'g','ख':'kh'};
+// v9.0: adds the hidden "a" between consonants, so शक्कर -> shakkar (was shkkr),
+// साखर -> sakhar, पच्चीस -> pachchis. Word-final consonants stay bare (तेल -> tel).
 function translit(t){
+  const s = [...String(t)];
   let o = '';
-  for(const ch of String(t)) o += (DEV[ch] !== undefined ? DEV[ch] : ch);
+  for(let i=0;i<s.length;i++){
+    const ch = s[i];
+    if(DEV[ch] === undefined){ o += ch; continue; }
+    let j = i + 1;
+    if(s[j] === '़' && NUKTA[ch]){ o += NUKTA[ch]; j++; i++; }
+    else o += DEV[ch];
+    if(DEV_CONS.has(ch)){
+      const nx = s[j];
+      if(nx && (DEV_CONS.has(nx) || nx === 'ं' || nx === 'ँ')) o += 'a';
+    }
+  }
   return o;
 }
 const NUMW = {zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
@@ -2766,6 +2944,892 @@ document.querySelectorAll('#vLangSeg button').forEach(b=>{
     document.querySelectorAll('#vLangSeg button').forEach(x=>x.classList.remove('on'));
     b.classList.add('on');
     toast('Voice bhasha: ' + b.textContent);
+  };
+});
+
+/* =====================================================================
+   v9.0  BOLKE BILL  (VoiceKhata style)
+   Speak everything in one go -> Done -> draft bill -> check / fix -> Bill me daalo.
+   Free mode : phone's speech (hi-IN by default) + our own kirana parser.
+   AI mode   : raw audio goes to Gemini, which returns the items as JSON.
+   ===================================================================== */
+/*VB-PARSE-START*/
+const VB_NUM = (()=>{
+  const m = {};
+  'एक दो तीन चार पांच छह सात आठ नौ दस ग्यारह बारह तेरह चौदह पंद्रह सोलह सत्रह अठारह उन्नीस बीस इक्कीस बाईस तेईस चौबीस पच्चीस छब्बीस सत्ताईस अट्ठाईस उनतीस तीस इकतीस बत्तीस तैंतीस चौंतीस पैंतीस छत्तीस सैंतीस अड़तीस उनतालीस चालीस इकतालीस बयालीस तैंतालीस चवालीस पैंतालीस छियालीस सैंतालीस अड़तालीस उनचास पचास इक्यावन बावन तिरपन चौवन पचपन छप्पन सत्तावन अट्ठावन उनसठ साठ इकसठ बासठ तिरसठ चौंसठ पैंसठ छियासठ सड़सठ अड़सठ उनहत्तर सत्तर इकहत्तर बहत्तर तिहत्तर चौहत्तर पचहत्तर छिहत्तर सतहत्तर अठहत्तर उन्यासी अस्सी इक्यासी बयासी तिरासी चौरासी पचासी छियासी सत्तासी अट्ठासी नवासी नब्बे इक्यानवे बानवे तिरानवे चौरानवे पचानवे छियानवे सत्तानवे अट्ठानवे निन्यानवे'
+    .split(' ').forEach((w,i)=>{ m[vnorm(w)] = i + 1; });
+  const extra = {
+    'पाँच':5,'छः':6,'छे':6,'दश':10,'शून्य':0,'जीरो':0,
+    'दोन':2,'पाच':5,'सहा':6,'नऊ':9,'दहा':10,'अकरा':11,'बारा':12,'तेरा':13,'चौदा':14,'पंधरा':15,'सोळा':16,
+    'सतरा':17,'अठरा':18,'एकोणीस':19,'वीस':20,'पंचवीस':25,'पस्तीस':35,'चाळीस':40,'पंचेचाळीस':45,
+    'पन्नास':50,'पंचावन्न':55,'पासष्ट':65,'पंच्याहत्तर':75,'ऐंशी':80,'नव्वद':90,
+    zero:0,shunya:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,
+    twelve:12,fifteen:15,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,
+    ek:1,do:2,teen:3,tin:3,char:4,chaar:4,panch:5,paanch:5,chhe:6,chhah:6,saat:7,sat:7,aath:8,ath:8,
+    nau:9,das:10,gyarah:11,barah:12,pandrah:15,bees:20,bis:20,pachchis:25,pachis:25,tees:30,tis:30,
+    chalis:40,pachas:50,pachaas:50,saath:60,sath:60,sattar:70,assi:80,nabbe:90,don:2,pach:5,saha:6
+  };
+  Object.keys(extra).forEach(k=>{ m[vnorm(k)] = extra[k]; });
+  return m;
+})();
+const VB_MUL  = {sau:100, so:100, hundred:100, shanbhar:100, shambhar:100, hajar:1000, hazar:1000, hajaar:1000, hazaar:1000, thousand:1000};
+const VB_FRAC = {adha:.5, adhi:.5, adhe:.5, aadha:.5, aadhi:.5, ardha:.5, ardhi:.5, half:.5,
+  pav:.25, paav:.25, pau:.25, quarter:.25, paun:.75, pauna:.75,
+  derh:1.5, dedh:1.5, dhedh:1.5, deedh:1.5, did:1.5, dhai:2.5, dhaai:2.5, adich:2.5, adhich:2.5};
+const VB_PRE  = {sava:.25, sawa:.25, sadhe:.5, sarhe:.5, sade:.5, saade:.5, saadhe:.5, paune:-.25, pone:-.25};
+const VB_UNIT = {kilo:'kilo', kg:'kilo', kgs:'kilo', kilogram:'kilo', kilu:'kilo',
+  gram:'gram', gm:'gram', gms:'gram', grm:'gram',
+  litar:'litre', litre:'litre', liter:'litre', ltr:'litre', lit:'litre', ml:'ml',
+  packet:'packet', paiket:'packet', paket:'packet', pakit:'packet', pocket:'packet', pkt:'packet', pakeet:'packet',
+  puda:'puda', pude:'puda', pura:'puda', pudi:'puda', pudya:'puda',
+  nag:'nag', piece:'nag', pieces:'nag', pis:'nag', pees:'nag', pc:'nag', pcs:'nag',
+  jar:'jar', dabba:'dabba', daba:'dabba', dabbi:'dabba', dabi:'dabba', box:'dabba',
+  botal:'bottle', bottle:'bottle', bottal:'bottle',
+  darjan:'dozen', dozen:'dozen', dajhan:'dozen', dazan:'dozen', thaili:'thaili'};
+const VB_RATE  = new Set(['rate','ret','bhav','bhaav','bhao','dar','daam','dam','price','kimat','kimmat']);
+const VB_KA    = new Set(['ka','ke','ki','la','cha','che','chi']);
+const VB_WALA  = new Set(['wala','wale','wali','vala','vale','vali']);
+const VB_SEP   = new Set(['aur','or','and','ani','aani','phir','fir','next','then','nantar','agla','agala','plus','tatha']);
+const VB_NAMEKW= new Set(['customer','kastamar','kastmar','costumer','grahak','naam','nam','name','nav','party','parti']);
+const VB_MOBKW = new Set(['mobile','mobail','mobaail','number','nambar','nanbar','numbar','nambr','phone','fon','contact','mo','no']);
+const VB_DBL   = {double:2, dabal:2, dubal:2, dabbal:2, triple:3, tripal:3, tribal:3};
+const VB_FILL  = new Set(['de','dedo','dena','dijiye','dijie','dedijiye','chahiye','chaiye','chahie','pahije','pahijet',
+  'lagega','lagenge','lagel','hai','he','hain','ahe','aahe','bhai','to','toh','ko','se','bhi','wo','ye',
+  'bill','bil','banao','bana','banana','likho','likh','add','karo','kar','kara','ghya','dya','dyaa','lo','le','sir','saab',
+  'liye','sathi','saathi','ka','ke','ki','cha','che','chi','la','minute','haan','ha','ok','okay','achha','theek','thik','please']);
+const VB_ALIAS_SRC = [
+  'sugar चीनी शक्कर साखर chini shakkar sakhar shakar',
+  'oil तेल tel',
+  'rice चावल तांदूळ तांदूल chawal chaval tandul',
+  'wheat गेहूं गेहूँ गहू gehu gahu gehun',
+  'atta आटा पीठ aata ata pith flour',
+  'dal दाल डाळ daal dali',
+  'toor तुअर तूर अरहर तुवर tuar tur arhar',
+  'moong मूंग मूग mung',
+  'masoor मसूर masur',
+  'urad उड़द उडद उडीद udid',
+  'chana चना हरभरा harbhara',
+  'salt नमक मीठ namak mith',
+  'tea चाय चहा पत्ती chai chaha patti',
+  'jaggery गुड़ गुड़ गूळ गुळ gud gul',
+  'ghee घी तूप tup',
+  'turmeric हल्दी हळद haldi halad',
+  'chilli मिर्च मिर्ची मिरची तिखट mirchi tikhat chili',
+  'coriander धनिया धने dhaniya dhane',
+  'cumin जीरा जिरे jeera jira jire',
+  'mustard राई मोहरी rai mohri',
+  'soap साबुन साबण sabun saban',
+  'biscuit बिस्कुट बिस्किट biskut biskit',
+  'matchbox माचिस काडीपेटी machis kadipeti',
+  'poha पोहा पोहे pohe',
+  'rava रवा सूजी सुजी suji sooji',
+  'groundnut peanut मूंगफली शेंगदाणा mungfali shengdana',
+  'jowar ज्वार ज्वारी jvari jwari',
+  'bajra बाजरा बाजरी bajri',
+  'coconut नारियल खोबरा nariyal khobra',
+  'milk दूध dudh doodh',
+  'curd दही dahi',
+  'egg अंडा अंडे anda ande',
+  'onion प्याज कांदा pyaj kanda',
+  'potato आलू बटाटा aloo alu batata',
+  'garlic लहसुन लसूण lahsun lasun',
+  'ginger अदरक adrak',
+  'candle मोमबत्ती mombatti',
+  'detergent सर्फ surf'
+];
+const VB_ALIAS = (()=>{
+  const m = {};
+  VB_ALIAS_SRC.forEach(line=>{
+    const g = [...new Set(line.split(' ').map(w=>vnorm(w)).filter(Boolean))];
+    g.forEach(w=>{ m[w] = [...new Set((m[w]||[]).concat(g))]; });
+  });
+  return m;
+})();
+const VB_STOP = new Set(['ka','ke','ki','wala','wali','vala','the','and','of','new','big','small']);
+
+function vbNumKind(n){
+  if(/^\d+(\.\d+)?$/.test(n)) return 'd';
+  if(VB_NUM[n] !== undefined) return 'w';
+  if(VB_MUL[n] !== undefined) return 'm';
+  if(VB_FRAC[n] !== undefined) return 'f';
+  if(VB_PRE[n] !== undefined) return 'p';
+  return null;
+}
+
+// split text into tokens {o: original word, n: normalised latin}
+function vbTokens(text){
+  const s = String(text || '')
+    .replace(/[०-९]/g, d => String('०१२३४५६७८९'.indexOf(d)))
+    .replace(/₹\s*/g, ' rs ')
+    .replace(/(\d),(\d{3})(?!\d)/g, '$1$2')
+    .replace(/(\d)\s*\/-/g, '$1 rs ')
+    .replace(/(\d)([^\d\s.,])/g, '$1 $2')
+    .replace(/([^\d\s.,])(\d)/g, '$1 $2')
+    .replace(/[।,;|\n\-]+/g, ' , ')
+    .replace(/\.(?!\d)/g, ' , ')
+    .replace(/¦/g, ' ¦ ');
+  const out = [];
+  s.split(/\s+/).forEach(o=>{
+    if(!o) return;
+    if(o === ','){ out.push({ o, n:',' }); return; }
+    if(o === '¦'){ out.push({ o, n:'¦', ty:'psep' }); return; }
+    if(/^\d+(\.\d+)?$/.test(o)){ out.push({ o, n:o }); return; }
+    const n = vnorm(o);
+    if(!n) return;
+    n.split(' ').forEach(x=> out.push({ o, n:x }));
+  });
+  // "de do" / "dena do" -> the "do" is "give", not 2
+  for(let i=1;i<out.length;i++){
+    if(out[i].n === 'do' && /^(de|dena|le|lena|kar|karo|bhej)$/.test(out[i-1].n)) out[i].n = 'de';
+  }
+  return out;
+}
+
+// merge number words into single number tokens: "ek sau bees" -> 120, "dedh" -> 1.5, "sava do" -> 2.25
+function vbMergeNums(toks){
+  const out = [];
+  let i = 0;
+  while(i < toks.length){
+    const k0 = vbNumKind(toks[i].n);
+    if(!k0 || (k0 === 'm' && toks[i].n === 'so')){ out.push(toks[i]); i++; continue; }
+    let cur = null, total = 0, pre = 0, j = i, raw = [], kinds = [];
+    while(j < toks.length){
+      const t = toks[j], k = vbNumKind(t.n);
+      if(!k) break;
+      if(k === 'd' || k === 'w'){
+        const v = k === 'd' ? parseFloat(t.n) : VB_NUM[t.n];
+        if(cur !== null && !(cur >= 100 && cur % 100 === 0 && v < 100 && Number.isInteger(v))) break;
+        cur = (cur || 0) + v + pre; pre = 0;
+      } else if(k === 'm'){
+        if(t.n === 'so' && cur === null) break;
+        const mul = VB_MUL[t.n];
+        if(cur === null){ cur = 1 + pre; pre = 0; }
+        if(cur >= mul) break;
+        cur = cur * mul;
+        if(mul === 1000){ total += cur; cur = null; }
+      } else if(k === 'f'){
+        const f = VB_FRAC[t.n];
+        if(cur === null) cur = f;
+        else if(f < 1 && Number.isInteger(cur)) cur += f;
+        else break;
+      } else if(k === 'p'){
+        if(cur !== null) break;
+        pre = VB_PRE[t.n];
+      }
+      raw.push(t.o); kinds.push(k); j++;
+    }
+    if(j === i){ out.push(toks[i]); i++; continue; }
+    if(cur === null && pre) cur = 1 + pre;
+    const val = total + (cur || 0);
+    if(!val && !kinds.includes('d') && !kinds.includes('w')){
+      for(let x=i;x<j;x++) out.push(toks[x]);
+      i = j; continue;
+    }
+    const single = (j - i === 1);
+    const dg = single && kinds[0] === 'd' && /^\d+$/.test(toks[i].n) ? toks[i].n
+             : (single && kinds[0] === 'w' && Number.isInteger(val) && val < 100 ? String(val) : null);
+    out.push({ o: raw.join(' '), n: String(val), num: val, ty:'num', dg, isDigit: kinds.includes('d') });
+    i = j;
+  }
+  return out;
+}
+
+// find a 10-digit mobile in runs of digits / single number words ("nau aath double do ...")
+function vbFindMobile(toks){
+  for(let i=0;i<toks.length;i++){
+    let s = '', j = i, used = [];
+    while(j < toks.length){
+      const t = toks[j];
+      if(t.ty === 'num' && t.dg !== null && t.dg !== undefined){ s += t.dg; used.push(j); j++; }
+      else if(VB_DBL[t.n] && toks[j+1] && toks[j+1].dg && toks[j+1].dg.length === 1){
+        s += toks[j+1].dg.repeat(VB_DBL[t.n]); used.push(j, j+1); j += 2;
+      } else break;
+      if(s.length === 10 && /^[6-9]/.test(s)){
+        const first = used[0], last = used[used.length-1];
+        let a = first;
+        while(a > 0 && VB_MOBKW.has(toks[a-1].n)) a--;
+        toks.splice(a, last - a + 1, { o:s, n:'#mob', ty:'mob' });
+        return s;
+      }
+      if(s.length > 10) break;
+    }
+  }
+  // "mobile 98220..." with a run that did not start at a token boundary
+  return '';
+}
+
+function vbClassify(t){
+  if(t.ty) return t;
+  const n = t.n;
+  if(n === ',') t.ty = 'sep';
+  else if(VB_UNIT[n]){ t.ty = 'unit'; t.u = VB_UNIT[n]; }
+  else if(n === 'rs' || /^rup[a-z]*$/.test(n) || n === 'rupees') t.ty = 'rs';
+  else if(VB_RATE.has(n)) t.ty = 'rate';
+  else if(VB_SEP.has(n)) t.ty = 'sep';
+  else if(VB_NAMEKW.has(n)) t.ty = 'namekw';
+  else if(VB_MOBKW.has(n)) t.ty = 'mobkw';
+  else if(VB_WALA.has(n)) t.ty = 'wala';
+  else if(VB_FILL.has(n)) t.ty = 'fill';
+  else t.ty = 'word';
+  return t;
+}
+
+function vbChunks(toks){
+  const items = [];
+  const fresh = ()=>({ words:[], qty:null, unit:'', rate:null, amount:null, qtyAfterName:false, rateNext:false });
+  let c = fresh(), jr = false;          // jr: the token before was a rate ("45 rupaye kilo")
+  const flush = ()=>{ if(c.words.length || c.qty !== null || c.rate !== null) items.push(c); c = fresh(); };
+  for(let i=0;i<toks.length;i++){
+    const t = toks[i], ty = t.ty;
+    const wasRate = jr; jr = false;
+    if(ty === 'sep'){ flush(); continue; }
+    if(ty === 'psep'){ if(c.words.length && (c.qty !== null || c.rate !== null)) flush(); continue; }
+    if(ty === 'fill' || ty === 'mobkw' || ty === 'namekw' || ty === 'mob') continue;
+    if(ty === 'rate'){ c.rateNext = true; continue; }
+    if(ty === 'num'){
+      const nx = toks[i+1], nty = nx ? nx.ty : '';
+      const isRs = nty === 'rs' || (nx && VB_KA.has(nx.n) && !VB_WALA.has(nx.n));
+      if(nty === 'rs' && toks[i+2] && toks[i+2].ty === 'wala'){
+        if(c.rate !== null) flush();
+        c.words.push({ o:t.o, n:t.n }, { o:nx.o, n:'rupaye' });
+        i += 2; continue;
+      }
+      // "150 rupaye ka jeera" = jeera worth 150, before any product word
+      const kaAfter = nty === 'rs' && toks[i+2] && /^(ka|ki|ke|cha|chi|che)$/.test(toks[i+2].n);
+      if(kaAfter && !c.words.length && c.rate === null && c.qty === null){
+        c.amount = t.num; i += 2; continue;
+      }
+      if(isRs || c.rateNext){
+        if(c.rate !== null){
+          if(c.qty !== null && c.words.length){ c.words.push({ o:String(c.rate), n:String(c.rate) }, { o:'rupaye', n:'rupaye' }); }
+          else flush();
+        }
+        c.rate = t.num; c.rateNext = false; jr = true;
+        if(isRs) i++;
+        continue;
+      }
+      if(nty === 'unit'){
+        if(c.qty !== null){
+          if(c.unit === 'kilo' && nx.u === 'gram' && t.num < 1000){ c.qty += t.num / 1000; i++; continue; }
+          flush();
+        }
+        c.qty = t.num; c.unit = nx.u; c.qtyAfterName = c.words.length > 0;
+        i++; continue;
+      }
+      if(c.qty === null){ c.qty = t.num; c.qtyAfterName = c.words.length > 0; continue; }
+      const nextWord = nx && (nx.ty === 'word');
+      if(c.rate === null && !(nextWord && c.words.length) && (t.isDigit || t.num >= 10)){ c.rate = t.num; continue; }
+      flush(); c.qty = t.num; continue;
+    }
+    if(ty === 'unit'){
+      if(wasRate){ if(!c.unit) c.unit = t.u; continue; }
+      if(c.qty === null){ c.qty = 1; c.unit = t.u; c.qtyAfterName = c.words.length > 0; }
+      else if(!c.unit) c.unit = t.u;
+      continue;
+    }
+    if(ty === 'rs' || ty === 'wala') continue;
+    // a word
+    const complete = c.rate !== null || (c.qty !== null && c.qtyAfterName);
+    if(complete && c.words.length) flush();
+    c.words.push({ o:t.o, n:t.n });
+  }
+  flush();
+  // fragments with no product words: give their qty / rate to a neighbour
+  const res = [];
+  items.forEach((it, ix)=>{
+    if(it.words.length){ res.push(it); return; }
+    const prev = res[res.length-1];
+    if(prev && ((it.qty !== null && prev.qty === null) || (it.qty === null && it.rate !== null && prev.rate === null))){
+      if(it.qty !== null && prev.qty === null){ prev.qty = it.qty; prev.unit = prev.unit || it.unit; }
+      if(it.rate !== null && prev.rate === null) prev.rate = it.rate;
+      return;
+    }
+    const next = items[ix+1];
+    if(next && next.words.length){
+      if(next.qty === null && it.qty !== null){ next.qty = it.qty; next.unit = next.unit || it.unit; }
+      if(next.rate === null && it.rate !== null) next.rate = it.rate;
+    }
+  });
+  return res;
+}
+
+// pull out customer name: after a keyword ("customer Ramesh Patil"), before a mobile,
+// before "ka bill", or the opening words when they match a saved customer
+function vbTakeName(toks){
+  const stopTy = new Set(['num','unit','sep','psep','mobkw','mob','rs','rate']);
+  let k = toks.findIndex(t=> t.ty === 'namekw');
+  if(k >= 0){
+    const w = []; let j = k + 1;
+    while(j < toks.length && w.length < 5 && !stopTy.has(toks[j].ty)){
+      if(toks[j].ty === 'word' || toks[j].ty === 'wala') w.push(toks[j]);
+      else if(w.length) break;
+      j++;
+    }
+    if(w.length){ toks.splice(k, j - k); return w.map(x=>x.o).filter((v,i,a)=>a.indexOf(v)===i).join(' '); }
+  }
+  let j = 0; const lead = [];
+  while(j < toks.length && (toks[j].ty === 'word') && lead.length < 5){ lead.push(toks[j]); j++; }
+  if(!lead.length) return '';
+  const nameTxt = lead.map(x=>x.o).filter((v,i,a)=>a.indexOf(v)===i).join(' ');
+  let x = j;
+  while(x < toks.length && (toks[x].ty === 'mobkw' || toks[x].ty === 'fill' || toks[x].ty === 'psep' || toks[x].ty === 'sep')) x++;
+  const beforeMob = toks[x] && toks[x].ty === 'mob';
+  const kaBill = toks[j] && /^(ka|ke|ki|cha|che|chi|liye|sathi|saathi)$/.test(toks[j].n) &&
+                 toks.slice(j, j+3).some(t=> /^(bill|bil|liye|sathi|saathi)$/.test(t.n));
+  let saved = false;
+  if(!beforeMob && !kaBill && typeof matchCustomers === 'function'){
+    const cand = matchCustomers([nameTxt]);
+    saved = cand.length && cand[0].sc >= 0.8 && (!cand[1] || cand[0].sc - cand[1].sc >= 0.12);
+    if(saved && typeof vbMatch === 'function'){
+      const ph = vbMatch(lead);
+      if(ph.length && ph[0].sc >= cand[0].sc - 0.1) saved = false;
+    }
+  }
+  if(beforeMob || kaBill || saved){ toks.splice(0, j); return nameTxt; }
+  return '';
+}
+
+function vbParse(text){
+  let toks = vbTokens(text);
+  toks = vbMergeNums(toks);
+  const mobile = vbFindMobile(toks);
+  toks.forEach(vbClassify);
+  toks.forEach((t,i)=>{ if(t.ty === 'fill' && t.n === 'de' && toks[i+1] && toks[i+1].ty === 'word' && toks[i-1] && toks[i-1].ty === 'word') t.ty = 'word'; });
+  const name = vbTakeName(toks);
+  const chunks = vbChunks(toks);
+  return { name, mobile, chunks };
+}
+/*VB-PARSE-END*/
+
+/* ---- product matching (English name + Marathi name + bolchal naam + kirana dictionary) ---- */
+function vbSkel(w){
+  let s = w.replace(/ph/g,'f').replace(/sh/g,'s').replace(/ch/g,'C').replace(/c/g,'k').replace(/C/g,'c')
+           .replace(/([kgjtdpb])h/g,'$1').replace(/q/g,'k').replace(/w/g,'v').replace(/z/g,'j').replace(/x/g,'ks');
+  s = (s[0] || '') + s.slice(1).replace(/[aeiouy]/g,'');
+  return s.replace(/(.)\1+/g,'$1');
+}
+// spoken letter names: "parle ji" = PARLE G, "bi tex" = B TEX
+const VB_LET = {a:'e',b:'bi',c:'si',d:'di',e:'i',f:'eph',g:'ji',h:'ech',j:'je',k:'ke',l:'el',m:'em',n:'en',o:'o',p:'pi',q:'kyu',r:'ar',s:'es',t:'ti',u:'yu',v:'vi',w:'dabalyu',x:'eks',y:'vai',z:'jed'};
+function vbTokSim(a, b){
+  if(b.length === 1) return (a === b || VB_LET[b] === a || (VB_LET[b] && simTok(a, VB_LET[b]) >= 0.65)) ? 1 : 0;
+  let v = simTok(a, b);
+  if(v >= 0.9 || a.length < 3 || b.length < 3) return v;
+  const sa = vbSkel(a), sb = vbSkel(b);
+  if(sa.length < 2 || sb.length < 2) return v;
+  if(sa === sb) return Math.max(v, 0.88);
+  const m = Math.max(sa.length, sb.length), d = lev(sa, sb);
+  const s2 = m ? 1 - d/m : 0;
+  return s2 >= 0.75 ? Math.max(v, s2 * 0.85) : v;
+}
+let vbIdx = null;
+function vbIndex(){
+  vbIdx = P.map(p=>{
+    const f = [vnorm(p.name)];
+    if(p.mar) f.push(vnorm(p.mar));
+    String(p.alias || '').split(/[,|]/).forEach(a=>{ a = vnorm(a); if(a) f.push(a); });
+    return { p, f: f.map(x=> x.split(' ').filter(t=> t && !VB_STOP.has(t))).filter(x=>x.length) };
+  });
+  return vbIdx;
+}
+function vbMatch(words){
+  if(!vbIdx) vbIndex();
+  const all = words.map(w=> typeof w === 'string' ? w : w.n).filter(t=> t && !VB_STOP.has(t));
+  const isNumish = t=> /^\d/.test(t) || t === 'rs' || /^rup[a-z]*$/.test(t);
+  const nums = all.filter(t=> /^\d+(\.\d+)?$/.test(t));
+  let qt = all.filter(t=> t.length > 1 && !isNumish(t));
+  if(!qt.length) qt = all.filter(t=> t.length > 1);
+  if(!qt.length) return [];
+  const cands = qt.map(t=> VB_ALIAS[t] ? VB_ALIAS[t] : [t]);
+  const out = [];
+  vbIdx.forEach(({p, f})=>{
+    let best = 0;
+    f.forEach(ft=>{
+      let sum = 0; const used = new Set();
+      qt.forEach((t, ix)=>{
+        let b = 0, bj = -1;
+        for(let j=0;j<ft.length;j++){
+          for(const c of cands[ix]){ const v = vbTokSim(c, ft[j]); if(v > b){ b = v; bj = j; } }
+          if(b === 1) break;
+        }
+        sum += b; if(b >= 0.6) used.add(bj);
+      });
+      let sc = sum / qt.length;
+      const extra = ft.filter(t=> !isNumish(t)).length - [...used].filter(j=> !isNumish(ft[j]||'')).length;
+      sc -= Math.min(0.15, Math.max(0, extra) * 0.04);
+      if(nums.length && nums.some(n=> ft.includes(n))) sc += 0.08;
+      if(sc > best) best = sc;
+    });
+    if(num(p.sell) > 0) best += 0.02;
+    if(best >= 0.45) out.push({ p, sc: best });
+  });
+  return out.sort((a,b)=> b.sc - a.sc).slice(0, 5);
+}
+function vbTitle(s){ return String(s).replace(/\b[a-z]/g, c=> c.toUpperCase()); }
+function vbDecide(it){
+  const hits = it.hits || [];
+  const top = hits[0], gap = hits[1] ? top.sc - hits[1].sc : 1;
+  if(top && top.sc >= 0.8 && gap >= 0.06){ it.p = top.p; it.tag = ''; }
+  else if(top && top.sc >= 0.58){ it.p = top.p; it.tag = 'chk'; }
+  else { it.p = null; it.tag = 'new'; }
+  it.auto = it.p;
+  it.name = it.p ? it.p.name : vbTitle(it.spoken);
+  if(!(it.rate > 0)) it.rate = it.p ? num(it.p.sell) : 0;
+  return it;
+}
+function vbFromText(text){
+  vbIndex();
+  const r = vbParse(text);
+  const items = r.chunks.map(c=>{
+    const it = { spoken: c.words.map(w=>w.o).filter((v,i,a)=> a.indexOf(v) === i).join(' '),
+                 qty: c.qty !== null && c.qty > 0 ? c.qty : 1, unit: c.unit || '',
+                 rate: c.rate !== null ? c.rate : 0, spokenRate: c.rate !== null };
+    it.hits = vbMatch(c.words);
+    vbDecide(it);
+    if(c.amount !== null){                     // "150 rupaye ka jeera"
+      const sell = it.p ? num(it.p.sell) : 0;
+      if(sell > 0 && c.qty === null){ it.qty = Math.round(c.amount / sell * 1000) / 1000; it.rate = sell; it.unit = it.unit || 'kilo'; it.amountSaid = c.amount; }
+      else { it.rate = c.amount; it.spokenRate = true; }
+    }
+    return it;
+  });
+  return { name: r.name, mobile: r.mobile, items, heard: text };
+}
+
+/* ---- state ---- */
+const vbSt = { on:false, phase:'', paused:false, finals:[], interim:'', t0:0, acc:0, timer:null,
+               recog:null, endCb:null, talk:0, raf:0, ai:null, draft:null, edit:null, appendTo:null };
+function vbAiReady(){ return !!(S.aiOn && S.aiKey); }
+function vbModeChip(){ $('vbMode').textContent = vbAiReady() ? 'AI ✓' : 'Free'; }
+function vbPhase(ph){
+  vbSt.phase = ph;
+  $('vbListen').style.display = ph === 'listen' ? 'block' : 'none';
+  $('vbWork').style.display   = ph === 'work' ? 'block' : 'none';
+  $('vbReview').style.display = ph === 'review' ? 'block' : 'none';
+  $('vbBotListen').style.display = ph === 'listen' ? 'flex' : 'none';
+  $('vbBotReview').style.display = ph === 'review' ? 'flex' : 'none';
+}
+function vbLangUI(){
+  document.querySelectorAll('#vbLang button').forEach(b=> b.classList.toggle('on', b.dataset.l === (S.bvlang || 'hi-IN')));
+}
+(function(){ const bx = $('vbBars'); let h = ''; for(let i=0;i<30;i++) h += '<b></b>'; bx.innerHTML = h; })();
+function vbBarsLoop(){
+  if(!vbSt.on || vbSt.phase !== 'listen'){ vbSt.raf = 0; return; }
+  const bars = $('vbBars').children;
+  let lvl = 0;
+  if(vbSt.ai && vbSt.ai.an){
+    const a = vbSt.ai.an, d = new Uint8Array(a.fftSize); a.getByteTimeDomainData(d);
+    let s = 0; for(let i=0;i<d.length;i++){ const x = (d[i]-128)/128; s += x*x; }
+    lvl = Math.min(1, Math.sqrt(s/d.length) * 5);
+  } else lvl = (Date.now() - vbSt.talk < 450) ? 0.8 : 0.06;
+  if(vbSt.paused) lvl = 0;
+  for(let i=0;i<bars.length;i++){
+    const r = lvl > 0.1 ? (0.35 + Math.random()*0.65) : 1;
+    bars[i].style.height = Math.max(5, Math.round(80 * lvl * r)) + 'px';
+  }
+  vbSt.raf = requestAnimationFrame(vbBarsLoop);
+}
+function vbTick(){
+  const ms = vbSt.acc + (vbSt.paused ? 0 : Date.now() - vbSt.t0);
+  const s = Math.floor(ms/1000);
+  $('vbTime').textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+}
+function vbLive(){
+  const txt = vbSt.finals.join(' ');
+  $('vbLive').innerHTML = (txt || vbSt.interim) ? esc(txt) + (vbSt.interim ? ' <em>' + esc(vbSt.interim) + '</em>' : '')
+                                                 : '<em>Jo suna wo yahan dikhega…</em>';
+}
+
+/* ---- free mode: phone speech recognition, restarted after every pause ---- */
+function vbSR(){
+  if(!SR || !vbSt.on || vbSt.paused || vbSt.phase !== 'listen' || vbSt.recog) return;
+  const r = new SR();
+  r.lang = S.bvlang || 'hi-IN';
+  r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+  r.onresult = e=>{
+    let fin = '', inter = '';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const tr = e.results[i][0].transcript || '';
+      if(e.results[i].isFinal) fin += tr; else inter += tr;
+    }
+    if(fin.trim()){ vbSt.finals.push(fin.trim()); vbSt.interim = ''; }
+    else vbSt.interim = inter.trim();
+    vbSt.talk = Date.now(); vbLive();
+  };
+  r.onspeechstart = ()=>{ vbSt.talk = Date.now(); };
+  r.onerror = ev=>{
+    if(ev.error === 'not-allowed' || ev.error === 'service-not-allowed'){ toast('Mic ki permission do'); vbSt.paused = true; $('vbPause').innerHTML = '▶<small>Chalu</small>'; }
+    else if(ev.error === 'network') toast('Voice ke liye internet chahiye');
+  };
+  r.onend = ()=>{
+    if(vbSt.recog === r) vbSt.recog = null;
+    if(vbSt.interim){ vbSt.finals.push(vbSt.interim); vbSt.interim = ''; vbLive(); }
+    if(vbSt.endCb){ const cb = vbSt.endCb; vbSt.endCb = null; cb(); return; }
+    if(vbSt.on && !vbSt.paused && vbSt.phase === 'listen') setTimeout(vbSR, 120);
+  };
+  vbSt.recog = r;
+  try{ r.start(); }catch(e){ vbSt.recog = null; }
+}
+function vbSRStop(cb){
+  if(vbSt.recog){
+    vbSt.endCb = cb || null;
+    try{ vbSt.recog.stop(); }catch(e){}
+    if(cb) setTimeout(()=>{ if(vbSt.endCb === cb){ vbSt.endCb = null; vbSt.recog = null; cb(); } }, 1500);
+  } else if(cb) cb();
+}
+
+/* ---- AI mode: record raw audio (16 kHz WAV) for Gemini ---- */
+async function vbAiStart(){
+  const stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, channelCount:1 } });
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ac.createMediaStreamSource(stream);
+  const an = ac.createAnalyser(); an.fftSize = 512; src.connect(an);
+  const proc = ac.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+  proc.onaudioprocess = e=>{ if(!vbSt.paused) chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+  src.connect(proc); proc.connect(ac.destination);
+  vbSt.ai = { stream, ac, an, proc, chunks, rate: ac.sampleRate };
+}
+function vbAiStop(){
+  const a = vbSt.ai; if(!a) return null;
+  try{ a.proc.disconnect(); }catch(e){}
+  try{ a.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ a.ac.close(); }catch(e){}
+  vbSt.ai = null;
+  return a;
+}
+function vbWav(chunks, inRate){
+  const outRate = 16000, ratio = inRate / outRate;
+  let len = 0; chunks.forEach(c=> len += c.length);
+  const all = new Float32Array(len); let o = 0; chunks.forEach(c=>{ all.set(c, o); o += c.length; });
+  const n = Math.floor(len / ratio), pcm = new Int16Array(n);
+  for(let i=0;i<n;i++){
+    const a = Math.floor(i*ratio), b = Math.min(len, Math.floor((i+1)*ratio));
+    let s = 0, k = 0; for(let j=a;j<b;j++){ s += all[j]; k++; }
+    const v = Math.max(-1, Math.min(1, k ? s/k : 0));
+    pcm[i] = v < 0 ? v * 0x8000 : v * 0x7FFF;
+  }
+  const buf = new ArrayBuffer(44 + pcm.length*2), dv = new DataView(buf);
+  const w = (p, s)=>{ for(let i=0;i<s.length;i++) dv.setUint8(p+i, s.charCodeAt(i)); };
+  w(0,'RIFF'); dv.setUint32(4, 36 + pcm.length*2, true); w(8,'WAVE'); w(12,'fmt ');
+  dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,outRate,true); dv.setUint32(28,outRate*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+  w(36,'data'); dv.setUint32(40, pcm.length*2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return new Uint8Array(buf);
+}
+function vbB64(u8){ let s = ''; for(let i=0;i<u8.length;i+=0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i+0x8000)); return btoa(s); }
+async function vbGemini(part){
+  const model = (S.aiModel || 'gemini-2.5-flash').trim();
+  const plist = P.map(p=> p.name + (p.mar ? ' (' + p.mar + ')' : '') + (p.alias ? ' [' + p.alias + ']' : '')).join('\n');
+  const clist = C.slice(-400).map(c=> c.name).join('\n');
+  const prompt =
+'You are the billing assistant of an Indian kirana (grocery) shop. The shopkeeper speaks Hindi, Marathi, English or a mix. ' +
+'He says a customer name, maybe a 10-digit mobile number, and items with quantity, unit and sometimes the rate per unit.\n' +
+'Return ONLY JSON: {"heard":"what was said, in the spoken script","customer":{"name":"","mobile":""},' +
+'"items":[{"spoken":"words used for the item","product":"EXACT line text before any bracket from PRODUCT LIST, or empty",' +
+'"name":"clean English item name when not in the list","qty":1,"unit":"kilo|gram|litre|ml|packet|nag|jar|puda|dabba|bottle|dozen or empty","rate":0}]}\n' +
+'Rules: number words become digits (dedh/deed=1.5, dhai/adich=2.5, sava X=X+0.25, sadhe X=X+0.5, paune X=X-0.25, paav=0.25, aadha=0.5). ' +
+'rate is the price per unit only if spoken, else 0. Use the product list (Marathi names in brackets, spoken nicknames in square brackets) to pick the product; ' +
+'if nothing fits leave product empty. If the customer is in CUSTOMER LIST use that exact spelling. Never invent items.\n\n' +
+'PRODUCT LIST:\n' + plist + '\n\nCUSTOMER LIST:\n' + clist;
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-goog-api-key': S.aiKey },
+    body: JSON.stringify({ contents:[{ role:'user', parts:[{ text: prompt }, part] }],
+                           generationConfig:{ temperature:0, responseMimeType:'application/json' } })
+  });
+  let j = null; try{ j = await res.json(); }catch(e){}
+  if(!res.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + res.status));
+  const txt = ((j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
+              .map(x=> x.text || '').join('').replace(/^\s*```(json)?/,'').replace(/```\s*$/,'').trim();
+  return JSON.parse(txt);
+}
+function vbFromAi(r){
+  vbIndex();
+  const items = (r.items || []).map(x=>{
+    const spoken = String(x.spoken || x.name || x.product || '').trim();
+    const it = { spoken, qty: num(x.qty) > 0 ? num(x.qty) : 1, unit: String(x.unit || '').toLowerCase(),
+                 rate: num(x.rate), spokenRate: num(x.rate) > 0 };
+    const exact = x.product ? (findProd(x.product) || P.find(p=> (p.mar||'') === x.product)) : null;
+    it.hits = vbMatch(vnorm(x.product || x.name || spoken).split(' '));
+    if(exact){
+      it.hits = [{ p: exact, sc: 1 }].concat(it.hits.filter(h=> h.p !== exact)).slice(0,5);
+      it.p = exact; it.auto = exact; it.tag = ''; it.name = exact.name;
+      if(!(it.rate > 0)) it.rate = num(exact.sell);
+      return it;
+    }
+    vbDecide(it);
+    if(!it.p && x.name) it.name = String(x.name);
+    return it;
+  });
+  const cu = r.customer || {};
+  return { name: String(cu.name || '').trim(), mobile: String(cu.mobile || '').replace(/\D/g,'').slice(-10), items, heard: r.heard || '' };
+}
+
+/* ---- open / listen / done ---- */
+function vbOpen(append){
+  if(typeof vOn !== 'undefined' && vOn) vStop();
+  try{ document.activeElement && document.activeElement.blur(); }catch(e){}
+  vbSt.on = true; vbSt.appendTo = append ? vbSt.draft : null;
+  if(!append) vbSt.draft = null;
+  vbSt.finals = []; vbSt.interim = ''; vbSt.paused = false; vbSt.acc = 0; vbSt.t0 = Date.now();
+  $('vb').classList.add('on'); vbLangUI(); vbModeChip();
+  $('vbType').value = ''; $('vbType').style.display = SR || vbAiReady() ? 'none' : 'block';
+  $('vbPause').innerHTML = '⏸<small>Pause</small>';
+  $('vbStTxt').innerHTML = '<i></i>Sun raha hoon';
+  vbLive(); vbPhase('listen');
+  clearInterval(vbSt.timer); vbSt.timer = setInterval(vbTick, 500); vbTick();
+  if(!vbSt.raf) vbSt.raf = requestAnimationFrame(vbBarsLoop);
+  if(vbAiReady()){
+    $('vbLive').innerHTML = '<em>AI sun raha hai — aaram se poora bill boliye, phir Done.</em>';
+    vbAiStart().catch(e=>{ toast('Mic nahi mila: ' + e.message); });
+  } else if(SR) vbSR();
+  else toast('Is browser mein voice nahi — likh kar Done dabao');
+}
+function vbClose(){
+  vbSt.on = false; vbSt.edit = null;
+  vbSRStop(); vbAiStop();
+  clearInterval(vbSt.timer);
+  $('vb').classList.remove('on');
+}
+function vbPauseToggle(){
+  if(vbSt.paused){
+    vbSt.paused = false; vbSt.t0 = Date.now();
+    $('vbPause').innerHTML = '⏸<small>Pause</small>'; $('vbStTxt').innerHTML = '<i></i>Sun raha hoon';
+    if(!vbSt.ai) vbSR();
+  } else {
+    vbSt.paused = true; vbSt.acc += Date.now() - vbSt.t0;
+    $('vbPause').innerHTML = '▶<small>Chalu</small>'; $('vbStTxt').textContent = 'Ruka hua';
+    vbSRStop();
+  }
+}
+function vbTypeToggle(){
+  const t = $('vbType'), show = t.style.display === 'none';
+  t.style.display = show ? 'block' : 'none';
+  if(show){ vbSt.paused = true; vbSRStop(); $('vbPause').innerHTML = '▶<small>Chalu</small>'; $('vbStTxt').textContent = 'Likh kar Done dabao';
+            t.value = (t.value || vbSt.finals.join(' ')); t.focus(); }
+}
+async function vbDone(){
+  if(vbSt.phase !== 'listen') return;
+  const typed = $('vbType').style.display !== 'none' ? $('vbType').value.trim() : '';
+  vbPhase('work'); $('vbWorkTxt').textContent = vbAiReady() ? 'AI items nikal raha hai…' : 'Bill bana raha hoon…';
+  let draft = null;
+  try{
+    if(vbAiReady()){
+      const a = vbAiStop();
+      if(typed) draft = vbFromAi(await vbGemini({ text: 'SPOKEN TEXT:\n' + typed }));
+      else {
+        if(!a || !a.chunks.length) throw new Error('Kuch record nahi hua');
+        const wav = vbWav(a.chunks, a.rate);
+        if(wav.length < 16000) throw new Error('Bahut chhota — dobara boliye');
+        draft = vbFromAi(await vbGemini({ inline_data:{ mime_type:'audio/wav', data: vbB64(wav) } }));
+      }
+    } else {
+      await new Promise(res=> vbSRStop(res));
+      if(vbSt.interim){ vbSt.finals.push(vbSt.interim); vbSt.interim = ''; }
+      const text = typed || vbSt.finals.join(' ¦ ');   // ¦ = a pause: splits items only when one is complete
+      if(!text.replace(/¦/g,'').trim()) throw new Error('Kuch suna nahi — dobara boliye');
+      draft = vbFromText(text);
+    }
+  }catch(e){
+    toast(e.message || 'Gadbad hui');
+    vbPhase('listen'); vbSt.paused = false; vbSt.t0 = Date.now();
+    $('vbPause').innerHTML = '⏸<small>Pause</small>';
+    if(vbAiReady()) vbAiStart().catch(()=>{}); else vbSR();
+    if(!vbSt.raf) vbSt.raf = requestAnimationFrame(vbBarsLoop);
+    return;
+  }
+  // a spoken mobile that belongs to a saved customer fills the name too
+  if(draft.mobile && !draft.name){ const c = C.find(x=> x.mobile === draft.mobile); if(c) draft.name = c.name; }
+  draft.cust = null;
+  if(draft.name){
+    const cand = matchCustomers([draft.name]);
+    if(cand.length && cand[0].sc >= 0.75 && (!cand[1] || cand[0].sc - cand[1].sc >= 0.1)){
+      draft.cust = cand[0].c; draft.name = cand[0].c.name; if(!draft.mobile) draft.mobile = cand[0].c.mobile || '';
+    }
+  }
+  const base = vbSt.appendTo;
+  if(base){
+    if(draft.name){ base.name = draft.name; base.cust = draft.cust; }
+    if(draft.mobile) base.mobile = draft.mobile;
+    base.items = base.items.concat(draft.items);
+    base.heard = (base.heard ? base.heard + ' | ' : '') + draft.heard;
+    draft = base;
+  }
+  vbSt.draft = draft; vbSt.appendTo = null; vbSt.edit = null;
+  clearInterval(vbSt.timer);
+  vbReview();
+}
+
+/* ---- review screen ---- */
+const vbQ = v => String(Math.round(v*1000)/1000);
+const vbR = v => '₹' + (Math.round(v*100)/100);
+const VB_UNITS = ['', 'kilo', 'gram', 'litre', 'ml', 'packet', 'nag', 'jar', 'puda', 'dabba', 'bottle', 'dozen', 'thaili'];
+function vbTotal(){
+  const t = vbSt.draft.items.reduce((s,i)=> s + (i.qty||0)*(i.rate||0), 0);
+  $('vbTotal').textContent = money0(t);
+}
+function vbChipsHtml(it){
+  const list = it.hits || [];
+  let h = list.map(x=> '<button data-pick="' + esc(x.p.id) + '" class="' + (it.p === x.p ? 'on' : '') + '">' + esc(x.p.name) +
+                       '<small>' + (num(x.p.sell) ? vbR(num(x.p.sell)) : 'rate nahi') + '</small></button>').join('');
+  h += '<button data-pick="new" class="' + (!it.p ? 'on' : '') + '">＋ Naya: ' + esc(it.newName || vbTitle(it.spoken) || 'item') + '<small>list me jud jayega</small></button>';
+  return h;
+}
+function vbEditor(it){
+  return '<div class="vb-ed">' +
+    '<input id="vbS" placeholder="Product dhundo…" autocomplete="off" style="margin-bottom:7px">' +
+    '<div class="vchips" id="vbChips">' + vbChipsHtml(it) + '</div>' +
+    (!it.p ? '<input id="vbN" value="' + esc(it.name) + '" placeholder="Naye item ka naam" style="margin-bottom:7px">' : '') +
+    '<div class="g3">' +
+      '<div><label>Qty</label><input id="vbQ" type="number" inputmode="decimal" step="0.01" value="' + vbQ(it.qty) + '" class="num"></div>' +
+      '<div><label>Unit</label><select id="vbU">' + VB_UNITS.map(u=> '<option value="' + u + '"' + (u === it.unit ? ' selected' : '') + '>' + (u || '—') + '</option>').join('') + '</select></div>' +
+      '<div><label>Rate</label><input id="vbRt" type="number" inputmode="decimal" step="0.01" value="' + (it.rate || '') + '" class="num"></div>' +
+    '</div>' +
+    '<div class="g2" style="margin-top:8px"><button class="btn btn-sm" data-act="del" style="color:var(--danger)">🗑 Hatao</button>' +
+    '<button class="btn-gold btn-sm" data-act="ok">✓ Theek</button></div></div>';
+}
+function vbReview(){
+  const d = vbSt.draft;
+  vbPhase('review');
+  $('vbName').value = d.name || '';
+  $('vbMob').value = d.mobile || '';
+  $('vbCustTag').innerHTML = d.cust ? '<span class="vb-tag old">purana</span>' : (d.name ? '<span class="vb-tag new">naya</span>' : '');
+  const box = $('vbItems');
+  if(!d.items.length){
+    box.innerHTML = '<div class="vb-heard" style="text-align:center;padding:14px">Koi item samajh nahi aaya. "Aur bolo" dabao — har item ke saath qty boliye.</div>';
+  } else {
+    box.innerHTML = d.items.map((it, ix)=>{
+      const tag = it.tag === 'new' ? '<span class="vb-tag new">• Naya item</span>'
+                : it.tag === 'chk' ? '<span class="vb-tag chk">• Check karo</span>' : '';
+      return '<div class="vb-row" data-ix="' + ix + '"><div class="l">' +
+        '<div class="n">' + esc(it.name) + tag + '</div>' +
+        '<div class="s num">' + vbQ(it.qty) + (it.unit ? ' ' + it.unit : '') + ' × ' +
+          (it.rate ? vbR(it.rate) : '<b style="color:#FFC461">rate?</b>') +
+          (it.spoken && vnorm(it.spoken) !== vnorm(it.name) ? ' &nbsp;• suna: ' + esc(it.spoken) : '') + '</div>' +
+        (vbSt.edit === ix ? vbEditor(it) : '') +
+        '</div><div class="a num" id="vbA' + ix + '">' + money0((it.qty||0)*(it.rate||0)) + '</div></div>';
+    }).join('');
+  }
+  $('vbHeard').innerHTML = d.heard ? 'Suna: “' + esc(String(d.heard).replace(/\s*¦\s*/g, ' … ')) + '”' : '';
+  vbTotal();
+  if(vbSt.edit !== null) vbWireEditor();
+}
+function vbWireEditor(){
+  const ix = vbSt.edit, it = vbSt.draft.items[ix];
+  const amt = ()=>{ $('vbA' + ix).textContent = money0((it.qty||0)*(it.rate||0)); vbTotal(); };
+  $('vbQ').oninput = ()=>{ it.qty = num($('vbQ').value); amt(); };
+  $('vbRt').oninput = ()=>{ it.rate = num($('vbRt').value); it.spokenRate = true; amt(); };
+  $('vbU').onchange = ()=>{ it.unit = $('vbU').value; };
+  if($('vbN')) $('vbN').oninput = ()=>{ it.name = $('vbN').value; it.newName = it.name; };
+  $('vbS').oninput = ()=>{
+    const q = $('vbS').value.trim();
+    if(q){ it.hits = vbMatch(vbTokens(q).map(t=> t.n)); if(!it.p) it.newName = vbTitle(q); }
+    $('vbChips').innerHTML = vbChipsHtml(it);
+  };
+}
+$('vbItems').addEventListener('click', e=>{
+  const row = e.target.closest('.vb-row'); if(!row) return;
+  const ix = +row.dataset.ix, it = vbSt.draft.items[ix];
+  const pick = e.target.closest('[data-pick]');
+  const act = e.target.closest('[data-act]');
+  if(pick){
+    const id = pick.dataset.pick;
+    if(id === 'new'){ it.p = null; it.tag = 'new'; it.name = it.newName || vbTitle(it.spoken) || it.name; }
+    else {
+      const h = (it.hits || []).find(x=> x.p.id === id);
+      if(h){ it.p = h.p; it.tag = ''; it.name = h.p.name; if(!it.spokenRate) it.rate = num(h.p.sell); }
+    }
+    vbReview(); return;
+  }
+  if(act){
+    if(act.dataset.act === 'del'){ vbSt.draft.items.splice(ix, 1); vbSt.edit = null; }
+    else { vbSt.edit = null; if(it.p && it.tag === 'chk') it.tag = ''; }
+    vbReview(); return;
+  }
+  if(e.target.closest('.vb-ed')) return;
+  vbSt.edit = vbSt.edit === ix ? null : ix;
+  vbReview();
+});
+$('vbName').oninput = ()=>{ vbSt.draft.name = $('vbName').value; vbSt.draft.cust = null; };
+$('vbMob').oninput = ()=>{ vbSt.draft.mobile = $('vbMob').value.replace(/\D/g,'').slice(-10); };
+
+function vbLearn(p, spoken){
+  const s = String(spoken || '').trim(); if(!p || !s) return;
+  if(vnorm(s) === vnorm(p.name) || vnorm(s) === vnorm(p.mar || '')) return;
+  const have = String(p.alias || '').split(',').map(x=> vnorm(x)).filter(Boolean);
+  if(have.includes(vnorm(s))) return;
+  p.alias = (p.alias ? p.alias + ', ' : '') + s;
+}
+function vbApply(){
+  const d = vbSt.draft; if(!d) return;
+  const items = d.items.filter(i=> (i.qty||0) > 0 && String(i.name||'').trim());
+  if(!items.length && !d.name && !d.mobile){ toast('Bill me daalne ko kuch nahi'); return; }
+  if(d.name) $('cName').value = d.name;
+  if(d.mobile && d.mobile.length === 10) $('cMob').value = d.mobile;
+  let fresh = 0, learnt = 0;
+  items.forEach(it=>{
+    let p = it.p;
+    const rate = num(it.rate);
+    if(!p){
+      const nm = String(it.name).trim();
+      p = findProd(nm);
+      if(!p){
+        p = { id:'p'+Date.now()+Math.random().toString(36).slice(2,6), name:nm, mar:'', alias:'', pur:0, sell:rate };
+        P.push(p); fresh++;
+      }
+    } else {
+      if(it.auto !== p && it.spoken){ vbLearn(p, it.spoken); learnt++; }
+      if(rate && rate !== num(p.sell)) p.sell = rate;
+    }
+    cart.push({ name:p.name, mar:p.mar||'', qty:it.qty, rate: rate || num(p.sell), pur:num(p.pur), u: it.unit || '' });
+  });
+  if(fresh){ P.sort((a,b)=>a.name.localeCompare(b.name)); fillDatalists(); }
+  if($('cName').value.trim() || $('cMob').value.trim()) saveCustomer();
+  save(); vbIdx = null;
+  renderCart();
+  vbSt.draft = null;
+  vbClose();
+  const sb = $('bWAtext'); if(sb) setTimeout(()=> sb.scrollIntoView({ behavior:'smooth', block:'center' }), 250);
+  toast(items.length + ' item bill me aa gaye' + (fresh ? ' • ' + fresh + ' naye product' : '') + (learnt ? ' • ' + learnt + ' naam yaad kiye' : ''));
+}
+
+/* ---- buttons ---- */
+$('vbOpen').onclick = ()=> vbOpen(false);
+$('vbClose').onclick = vbClose;
+$('vbCancel').onclick = ()=>{
+  if(vbSt.appendTo){ vbSRStop(); vbAiStop(); clearInterval(vbSt.timer); vbSt.draft = vbSt.appendTo; vbSt.appendTo = null; vbReview(); }
+  else vbClose();
+};
+$('vbPause').onclick = vbPauseToggle;
+$('vbTypeBtn').onclick = vbTypeToggle;
+$('vbDone').onclick = vbDone;
+$('vbMore').onclick = ()=> vbOpen(true);
+$('vbApply').onclick = vbApply;
+$('vbMode').onclick = ()=>{
+  if(!S.aiKey){ toast('AI ke liye Report → settings me Gemini key daalo'); return; }
+  if(vbSt.phase !== 'listen'){ return; }
+  S.aiOn = !S.aiOn; save(); vbModeChip(); aiSegUI();
+  vbSRStop(); vbAiStop();
+  if(vbAiReady()) vbAiStart().catch(e=> toast('Mic nahi mila: ' + e.message)); else vbSR();
+  toast(vbAiReady() ? 'AI mode' : 'Free mode');
+};
+document.querySelectorAll('#vbLang button').forEach(b=>{
+  b.onclick = ()=>{
+    S.bvlang = b.dataset.l; save(); vbLangUI();
+    if(vbSt.phase === 'listen' && !vbSt.ai && !vbSt.paused){ vbSRStop(()=> vbSR()); }
+  };
+});
+function aiSegUI(){ document.querySelectorAll('#sAiSeg button').forEach(b=> b.classList.toggle('on', (b.dataset.ai === '1') === !!S.aiOn)); }
+$('sAiKey').value = S.aiKey || '';
+$('sAiModel').value = S.aiModel || '';
+aiSegUI();
+$('sAiKey').onchange = ()=>{ S.aiKey = $('sAiKey').value.trim(); if(S.aiKey && S.aiOn === undefined) S.aiOn = true; save(); aiSegUI(); toast(S.aiKey ? 'Gemini key save' : 'Key hata di'); };
+$('sAiModel').onchange = ()=>{ S.aiModel = $('sAiModel').value.trim(); save(); };
+document.querySelectorAll('#sAiSeg button').forEach(b=>{
+  b.onclick = ()=>{
+    if(b.dataset.ai === '1' && !S.aiKey){ toast('Pehle Gemini key daalo'); return; }
+    S.aiOn = b.dataset.ai === '1'; save(); aiSegUI();
   };
 });
 
@@ -3333,7 +4397,7 @@ document.querySelectorAll('.dgrid button').forEach(b=>{
     if(go === 'backup'){ $('bExport').click(); return; }
     if(go === 'voice'){
       document.querySelector('nav button[data-v="bill"]').click();
-      setTimeout(()=>{ if(!vOn) $('vStart').click(); }, 350);
+      setTimeout(()=>{ if(!vbSt.on) vbOpen(false); }, 350);
       return;
     }
     if(go === 'report'){
